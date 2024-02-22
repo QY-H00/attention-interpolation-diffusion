@@ -7,8 +7,8 @@ if __name__ == "__main__":
     
     # Initialize the generator
     channel = model.pipeline.unet.config.in_channels
-    height = model.pipeline.default_sample_size * model.pipeline.vae_scale_factor
-    width = model.pipeline.default_sample_size * model.pipeline.vae_scale_factor
+    height = model.pipeline.unet.config.sample_size * model.pipeline.vae_scale_factor
+    width = model.pipeline.unet.config.sample_size * model.pipeline.vae_scale_factor
     torch_device = "cuda"
     generator = torch.cuda.manual_seed(0)
     

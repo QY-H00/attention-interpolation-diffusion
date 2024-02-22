@@ -13,7 +13,7 @@ class InterpolationAttnProcessorFull:
     Personalized processor for performing attention-related interpolation.
     """
 
-    def __init__(self, size=10, is_fused=False, alpha=1, beta=1, torch_device="cuda"):
+    def __init__(self, size=10, is_fused=False, alpha=1, beta=1, torch_device="cuda", is_interpolate_uncond=False):
         '''
         Args:
         size: int, number of interpolation points including l1 and l2
@@ -28,6 +28,7 @@ class InterpolationAttnProcessorFull:
         self.size = size
         self.coef = ts.to(torch_device)
         self.is_fused = is_fused
+        self.is_interpolate_uncond = is_interpolate_uncond
 
     def __call__(
         self,
@@ -39,9 +40,11 @@ class InterpolationAttnProcessorFull:
         scale: float = 1.0,
     ) -> torch.Tensor:
         '''
-        The processor view the hidden states as [l1, ..., l_size] to interpolate
+        Notice that this attention processor is specifically design for generation with guidance.
+        The processor view the hidden states as [l1, ..., l_size, l1_uncond, ..., l_size_uncond] to interpolate
         The processor view l1 as starting vector and l_size as final vector
         For each token, it utilizes query generated itself, but key and value of l1 and l_size
+        For unconditional tokens, it utilizes query generated itself, but key and value of l1_uncond and l_size_uncond
         It then interpolates the full attention matrix.
         
         Args:
@@ -87,40 +90,52 @@ class InterpolationAttnProcessorFull:
         key = attn.to_k(encoder_hidden_states, *args)
         value = attn.to_v(encoder_hidden_states, *args)
 
-        key0 = key[0:1]
-        key2 = key[-1:]
-        value0 = value[0:1]
-        value2 = value[-1:]
+        key_a = key[0:1]
+        key_b = key[self.size-1:self.size]
+        value_a = value[0:1]
+        value_b = value[self.size-1:self.size]
+        
+        uncond_key_a = key[self.size:self.size+1]
+        uncond_key_b = key[-1:]
+        uncond_value_a = value[self.size:self.size+1]
+        uncond_value_b = value[-1:]
+        
+        if self.is_interpolate_uncond:
+            key_a = torch.cat([key_a]*(self.size) + [uncond_key_a]*(self.size))
+            key_b = torch.cat([key_b]*(self.size) + [uncond_key_b]*(self.size))
+            value_a = torch.cat([value_a]*(self.size) + [uncond_value_a]*(self.size))
+            value_b = torch.cat([value_b]*(self.size) + [uncond_value_b]*(self.size))
+        else:
+            key_a = torch.cat([key_a]*self.size + [key[self.size:]])
+            key_b = torch.cat([key_b]*self.size + [key[self.size:]])
+            value_a = torch.cat([value_a]*self.size + [value[self.size:]])
+            value_b = torch.cat([value_b]*self.size + [value[self.size:]])
 
-        key0 = torch.cat([key0]*(self.size+1))
-        key2 = torch.cat([key2]*(self.size+1))
-        value0 = torch.cat([value0]*(self.size+1))
-        value2 = torch.cat([value2]*(self.size+1))
-
-        key0 = attn.head_to_batch_dim(key0)
-        value0 = attn.head_to_batch_dim(value0)
-        key2 = attn.head_to_batch_dim(key2)
-        value2 = attn.head_to_batch_dim(value2)
+        key_a = attn.head_to_batch_dim(key_a)
+        value_a = attn.head_to_batch_dim(value_a)
+        key_b = attn.head_to_batch_dim(key_b)
+        value_b = attn.head_to_batch_dim(value_b)
 
         if self.is_fused:
             key = attn.head_to_batch_dim(key)
             value = attn.head_to_batch_dim(value)
-            key2 = torch.cat([key, key2], dim=-2)
-            value2 = torch.cat([value, value2], dim=-2)
-            key0 = torch.cat([key, key0], dim=-2)
-            value0 = torch.cat([value, value0], dim=-2)
+            key_b = torch.cat([key, key_b], dim=-2)
+            value_b = torch.cat([value, value_b], dim=-2)
+            key_a = torch.cat([key, key_a], dim=-2)
+            value_a = torch.cat([value, value_a], dim=-2)
+        
+        attention_probs_b = attn.get_attention_scores(query, key_b, attention_mask)
+        hidden_states_b = torch.bmm(attention_probs_b, value_b)
+        hidden_states_b = attn.batch_to_head_dim(hidden_states_b)
 
-        attention_probs12 = attn.get_attention_scores(query, key2, attention_mask)
-        hidden_states12 = torch.bmm(attention_probs12, value2)
-        hidden_states12 = attn.batch_to_head_dim(hidden_states12)
-
-        attention_probs01 = attn.get_attention_scores(query, key0, attention_mask)
-        hidden_states01 = torch.bmm(attention_probs01, value0)
-        hidden_states01 = attn.batch_to_head_dim(hidden_states01)
+        attention_probs_a = attn.get_attention_scores(query, key_a, attention_mask)
+        hidden_states_a = torch.bmm(attention_probs_a, value_a)
+        hidden_states_a = attn.batch_to_head_dim(hidden_states_a)
 
         coef = self.coef.reshape(-1, 1, 1)
+        coef = torch.cat([coef]*2, dim=0)
 
-        hidden_states = (1 - coef) * hidden_states01 + coef * hidden_states12
+        hidden_states = (1 - coef) * hidden_states_a + coef * hidden_states_b
         hidden_states = attn.to_out[0](hidden_states, *args)
         hidden_states = attn.to_out[1](hidden_states)
 
