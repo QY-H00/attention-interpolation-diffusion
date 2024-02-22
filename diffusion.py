@@ -1,17 +1,20 @@
 from typing import Union
 from types import MethodType
+from tqdm.auto import tqdm
 import numpy as np
 import torch
 from torch import FloatTensor
-from diffusers import StableDiffusionPipeline, DDIMScheduler
-from interpolation import linear_interpolation, sphere_interpolation, InterpolationAttnProcessorFull
+from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler
+from diffusers.models.attention_processor import AttnProcessor
+from transformers import CLIPTextModel, CLIPTokenizer
+from interpolation import linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor
 
 
-class InterpolationDiffusion:
+class InterpolationDiffusionGeneral:
     '''
     Diffusion that generates interpolated images
     '''
-    def __init__(self, repo_name: str="CompVis/stable-diffusion-v1-4", torch_device: str="cuda", num_inference_step=25):
+    def __init__(self, repo_name: str="CompVis/stable-diffusion-v1-4", torch_device: str="cuda"):
         self.pipeline = StableDiffusionPipeline.from_pretrained(repo_name, cache_dir="cache")
         self.pipeline.to(torch_device)
         ddim_scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler")
@@ -73,6 +76,135 @@ class InterpolationDiffusion:
         print("Decode...")
         images = self.pipeline(latents=latents, prompt_embeds=embs, num_inference_steps=0).images
         
+        return images
+
+
+class InterpolationStableDiffusionPipeline:
+    
+    def __init__(self, repo_name="CompVis/stable-diffusion-v1-4", device="cuda", frozen=True):
+        self.vae = AutoencoderKL.from_pretrained(repo_name, subfolder="vae", use_safetensors=True, cache_dir="weights")
+        self.tokenizer = CLIPTokenizer.from_pretrained(repo_name, subfolder="tokenizer", cache_dir="weights")
+        self.text_encoder = CLIPTextModel.from_pretrained(
+            repo_name, subfolder="text_encoder", use_safetensors=True, cache_dir="weights"
+        )
+        self.unet = UNet2DConditionModel.from_pretrained(
+            repo_name, subfolder="unet", use_safetensors=True, cache_dir="weights"
+        )
+        self.scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler", cache_dir="weights")
+        self.torch_device = device
+        self.vae.to(self.torch_device)
+        self.text_encoder.to(self.torch_device)
+        self.unet.to(self.torch_device)
+        self.guidance_scale = 7.5  # Scale for classifier-free guidance
+        
+        if frozen:
+            for param in self.unet.parameters():
+                param.requires_grad = False
+
+            for param in self.text_encoder.parameters():
+                param.requires_grad = False
+
+            for param in self.vae.parameters():
+                param.requires_grad = False
+
+    def prompt_to_embedding(self, prompt):
+        text_input = self.tokenizer(
+            prompt, padding="max_length", max_length=self.tokenizer.model_max_length, truncation=True, return_tensors="pt"
+        )
+
+        with torch.no_grad():
+            text_embeddings = self.text_encoder(text_input.input_ids.to(self.torch_device))[0]
+
+        max_length = text_input.input_ids.shape[-1]
+        uncond_input = self.tokenizer([""] * 1, padding="max_length", max_length=max_length, return_tensors="pt")
+        uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.torch_device))[0]
+
+        text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+        return text_embeddings
+
+    def retrieve_from_latent(self, latents, text_embeddings, timesteps=25):
+        self.scheduler.set_timesteps(timesteps)
+
+        for t in tqdm(self.scheduler.timesteps):
+            # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
+            latent_model_input = torch.cat([latents] * 2)
+            latent_model_input = self.scheduler.scale_model_input(latent_model_input, timestep=t)
+
+            # predict the noise residual
+            with torch.no_grad():
+                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            # perform guidance
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+        latents = 1 / 0.18215 * latents
+        with torch.no_grad():
+            image = self.vae.decode(latents).sample
+        image = (image / 2 + 0.5).clamp(0, 1).squeeze()
+        return image
+
+    def interpolate(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
+        # Prepare interpolated inputs
+        self.scheduler.set_timesteps(num_inference_steps)
+        latents = sphere_interpolation(latent1, latent2, size)
+        embs1 = self.prompt_to_embedding(prompt1)
+        emb1 = embs1[0:1]
+        uncond_emb1 = embs1[1:2]
+        embs2 = self.prompt_to_embedding(prompt2)
+        emb2 = embs2[0:1]
+        uncond_emb2 = embs2[1:2]
+        if guide_prompt is not None:
+            guide_embs = self.prompt_to_embedding(guide_prompt)
+            guide_emb = guide_embs[0:1]
+            uncond_guide_emb = guide_embs[1:2]
+            embs_first_half = linear_interpolation(emb1, guide_emb, size // 2)
+            embs_second_half = linear_interpolation(guide_emb, emb2, size - size // 2)
+            embs = torch.cat([embs_first_half, embs_second_half], dim=0)
+            uncond_embs_first_half = linear_interpolation(uncond_emb1, uncond_guide_emb, size // 2)
+            uncond_embs_second_half = linear_interpolation(uncond_guide_emb, uncond_emb2, size - size // 2)
+            uncond_embs = torch.cat([uncond_embs_first_half, uncond_embs_second_half], dim=0)
+        else:
+            embs = linear_interpolation(emb1, emb2, size)
+            uncond_embs = linear_interpolation(uncond_emb1, uncond_emb2, size)
+
+        i = 0
+        boost_step = int(num_inference_steps * boost_ratio)
+        for t in tqdm(self.scheduler.timesteps):
+            i += 1
+            # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
+            latent_model_input = self.scheduler.scale_model_input(latents, timestep=t)
+            # predict the noise residual
+            with torch.no_grad():
+                if i < boost_step:
+                    if early == "cross":
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    elif early == "fused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    else:
+                        raise ValueError("Invalid early parameter")
+                else:
+                    if late == "self":
+                        interpolate_attn_proc = AttnProcessor()
+                    elif late == "fused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    else:
+                        raise ValueError("Invalid early parameter")
+                    
+                self.unet.set_attn_processor(processor=interpolate_attn_proc)
+                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+                attn_proc = AttnProcessor()
+                self.unet.set_attn_processor(processor=attn_proc)
+                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+            # perform guidance
+            noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+        latents = 1 / 0.18215 * latents
+        with torch.no_grad():
+            image = self.vae.decode(latents).sample
+        images = (image / 2 + 0.5).clamp(0, 1)
         return images
 
 
