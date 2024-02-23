@@ -25,22 +25,18 @@ def show_images_horizontally(list_of_files, output_file):
         
     # Save the figure as PNG
     plt.savefig(output_file, bbox_inches="tight", pad_inches=0.1)
-    
-    
-def save_images(images, save_dir):
+        
+        
+def save_image(image, file_name):
     '''
     Save the image as JPG.
     
     Args:
-    - images: The input images as numpy array with shape (N, H, W, C).
-    - save_dir: The directory to save the images.
+    - image: The input image as numpy array with shape (H, W, C).
+    - file_name: The file name to save the image.
     '''
-    size = images.shape[0]
-    for i in range(size):
-        image = images[i]
-        filename = os.path.join(save_dir, f"{i+1}.jpg")
-        image = Image.fromarray(image)
-        image.save(filename)
+    image = Image.fromarray(image)
+    image.save(file_name)
 
 
 def load_and_process_images(load_dir):
@@ -82,6 +78,26 @@ def compute_wasserstein_distances(images):
     return distances
 
 
+def compute_gini(distances):
+    if len(distances) < 2:
+        return 0.0  # Gini index is 0 for less than two elements
+
+    # Sort the list of distances
+    sorted_distances = sorted(distances)
+    n = len(sorted_distances)
+    mean_distance = sum(sorted_distances) / n
+
+    # Compute the sum of absolute differences
+    sum_of_differences = 0
+    for i, di in enumerate(sorted_distances):
+        for j, dj in enumerate(sorted_distances):
+            sum_of_differences += abs(di - dj)
+
+    # Normalize the sum of differences by the mean and the number of elements
+    gini = sum_of_differences / (2 * n * n * mean_distance)
+    return gini
+
+
 def compute_smoothness_and_efficiency(images):
     '''
     Compute the smoothness and efficiency of the input images.
@@ -94,9 +110,34 @@ def compute_smoothness_and_efficiency(images):
     - efficiency: Mean of the Wasserstein distances of consecutive images.
     '''
     wasserstein_distances = compute_wasserstein_distances(images)
-    smoothness = np.mean(wasserstein_distances)
-    efficiency = np.var(wasserstein_distances)
+    smoothness = compute_gini(wasserstein_distances)
+    efficiency = np.mean(wasserstein_distances)
     return smoothness, efficiency
+
+
+def sort_source_and_interpolated():
+    root_dir = "results"
+    source_dir = os.path.join(root_dir, "source")
+    interpolated_dir = os.path.join(root_dir, "interpolated")
+    if not os.path.exists(source_dir):
+        os.makedirs(source_dir)
+    if not os.path.exists(interpolated_dir):
+        os.makedirs(interpolated_dir)
+    direct_eval_dir = os.path.join(root_dir, "direct_eval")
+    for pair_dir in os.listdir(direct_eval_dir):
+        print(pair_dir)
+        for trial_dir in os.listdir(os.path.join(direct_eval_dir, pair_dir)):
+            size = len(os.listdir(os.path.join(direct_eval_dir, pair_dir, trial_dir)))
+            source_1_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, "1.jpg")
+            source_1 = Image.open(source_1_path)
+            source_1.save(os.path.join(source_dir, f"{pair_dir}_{trial_dir}_1.jpg"))
+            source_2_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, f"{size}.jpg")
+            source_2 = Image.open(source_2_path)
+            source_2.save(os.path.join(source_dir, f"{pair_dir}_{trial_dir}_{size}.jpg"))
+            for i in range(2, size):
+                img_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, f"{i}.jpg")
+                img = Image.open(img_path)
+                img.save(os.path.join(interpolated_dir, f"{pair_dir}_{trial_dir}_{i}.jpg"))
 
 
 def calculate_fid(act1, act2):
@@ -110,6 +151,7 @@ def calculate_fid(act1, act2):
     Returns:
     - fid: The Frechet Inception Distance between the two sets of activations.
     '''
+    print(act1.shape, act2.shape)
     # Calculate mean and covariance statistics
     mu1, sigma1 = act1.mean(axis=0), np.cov(act1, rowvar=False)
     mu2, sigma2 = act2.mean(axis=0), np.cov(act2, rowvar=False)
@@ -119,6 +161,7 @@ def calculate_fid(act1, act2):
     if np.iscomplexobj(covmean):
         covmean = covmean.real
     # Calculate FID
+    print(np.sum((mu1 - mu2) ** 2))
     fid = np.sum((mu1 - mu2) ** 2) + np.trace(sigma1 + sigma2 - 2 * covmean)
     return fid
 
@@ -155,7 +198,7 @@ def seperate_source_and_interpolated_images(images):
     The input source is the start and end of the images, while the interpolated images are the rest.
     '''
     # Check if the array has at least two elements
-    if images.shape[0] < 2:
+    if len(images) < 2:
         raise ValueError("The input array should have at least two elements.")
 
     # Separate the array into two parts
@@ -166,13 +209,23 @@ def seperate_source_and_interpolated_images(images):
     return source, interpolation
 
 
-def compute_fidelity(images, device="cuda"):
+def compute_fidelity(list_images, model, device="cuda"):
     '''
     Compute the Fidelity of the input images.
     '''
-    source_images, interpolated_images = seperate_source_and_interpolated_images(images)
-    source_features = get_inception_features(source_images, device)
-    interpolated_features = get_inception_features(interpolated_images, device)
+    source_features = None
+    interpolated_features = None
+    for images in list_images:
+        source_images, interpolated_images = seperate_source_and_interpolated_images(images)
+        if source_features is None:
+            source_features = get_inception_features(source_images, model, device)
+        else:
+            source_features = np.concatenate((source_features, get_inception_features(source_images, model, device)))
+        if interpolated_features is None:
+            interpolated_features = get_inception_features(interpolated_images, model, device)
+        else:
+            interpolated_features = np.concatenate((interpolated_features, get_inception_features(interpolated_images, model, device)))
+
     fid_score = calculate_fid(source_features, interpolated_features)
     return fid_score
 

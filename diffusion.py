@@ -7,7 +7,7 @@ from torch import FloatTensor
 from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel
 from diffusers.models.attention_processor import AttnProcessor
 from transformers import CLIPTextModel, CLIPTokenizer
-from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor
+from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor, InterpolationAttnProcessorKeyValue
 
 
 class InterpolationDiffusionGeneral:
@@ -175,18 +175,18 @@ class InterpolationStableDiffusionPipeline:
             with torch.no_grad():
                 if i < boost_step:
                     if early == "cross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=boost_step, beta=boost_step)
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=num_inference_steps, beta=num_inference_steps)
                     elif early == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=boost_step, beta=boost_step)
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps, beta=num_inference_steps)
                     else:
-                        raise ValueError("Invalid early parameter")
+                        interpolate_attn_proc = AttnProcessor()
                 else:
                     if late == "self":
                         interpolate_attn_proc = AttnProcessor()
                     elif late == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(size=size, is_fused=True, alpha=num_inference_steps, beta=num_inference_steps)
                     else:
-                        raise ValueError("Invalid early parameter")
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(size=size, is_fused=False, alpha=num_inference_steps, beta=num_inference_steps)
                     
                 self.unet.set_attn_processor(processor=interpolate_attn_proc)
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
