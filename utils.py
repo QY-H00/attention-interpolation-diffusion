@@ -110,34 +110,9 @@ def compute_smoothness_and_efficiency(images):
     - efficiency: Mean of the Wasserstein distances of consecutive images.
     '''
     wasserstein_distances = compute_wasserstein_distances(images)
-    smoothness = compute_gini(wasserstein_distances)
+    smoothness = np.var(wasserstein_distances)
     efficiency = np.mean(wasserstein_distances)
     return smoothness, efficiency
-
-
-def sort_source_and_interpolated():
-    root_dir = "results"
-    source_dir = os.path.join(root_dir, "source")
-    interpolated_dir = os.path.join(root_dir, "interpolated")
-    if not os.path.exists(source_dir):
-        os.makedirs(source_dir)
-    if not os.path.exists(interpolated_dir):
-        os.makedirs(interpolated_dir)
-    direct_eval_dir = os.path.join(root_dir, "direct_eval")
-    for pair_dir in os.listdir(direct_eval_dir):
-        print(pair_dir)
-        for trial_dir in os.listdir(os.path.join(direct_eval_dir, pair_dir)):
-            size = len(os.listdir(os.path.join(direct_eval_dir, pair_dir, trial_dir)))
-            source_1_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, "1.jpg")
-            source_1 = Image.open(source_1_path)
-            source_1.save(os.path.join(source_dir, f"{pair_dir}_{trial_dir}_1.jpg"))
-            source_2_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, f"{size}.jpg")
-            source_2 = Image.open(source_2_path)
-            source_2.save(os.path.join(source_dir, f"{pair_dir}_{trial_dir}_{size}.jpg"))
-            for i in range(2, size):
-                img_path = os.path.join(direct_eval_dir, pair_dir, trial_dir, f"{i}.jpg")
-                img = Image.open(img_path)
-                img.save(os.path.join(interpolated_dir, f"{pair_dir}_{trial_dir}_{i}.jpg"))
 
 
 def calculate_fid(act1, act2):

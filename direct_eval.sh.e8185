@@ -1,0 +1,53 @@
+/home/qiyuan/attention-interpolation-diffusion/direct_eval.py:3: DeprecationWarning: 
+Pyarrow will become a required dependency of pandas in the next major release of pandas (pandas 3.0),
+(to allow more performant data types, such as the Arrow string type, and better interoperability with other libraries)
+but was not found to be installed on your system.
+If this would cause problems for you,
+please provide us feedback at https://github.com/pandas-dev/pandas/issues/54466
+        
+  import pandas as pd
+  0%|          | 0/300 [00:00<?, ?it/s]
+  0%|          | 0/25 [00:00<?, ?it/s][A  0%|          | 0/25 [00:00<?, ?it/s]
+  0%|          | 0/300 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 183, in <module>
+    root_dir = prepare_imgs(corpus_name="cifar100", method_name="attention", boost_ratio=1.0, early="fused", iters=300, trial_per_iters=5)
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 171, in prepare_imgs
+    images = pipe.interpolate(latent, latent, prompt1, prompt2, guide_prompt=None, size=5, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+  File "/home/qiyuan/attention-interpolation-diffusion/diffusion.py", line 192, in interpolate
+    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/unets/unet_2d_condition.py", line 1121, in forward
+    sample, res_samples = downsample_block(
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/unets/unet_2d_blocks.py", line 1199, in forward
+    hidden_states = attn(
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/transformers/transformer_2d.py", line 391, in forward
+    hidden_states = block(
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/attention.py", line 335, in forward
+    attn_output = self.attn1(
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/attention_processor.py", line 512, in forward
+    return self.processor(
+  File "/home/qiyuan/attention-interpolation-diffusion/interpolation.py", line 238, in __call__
+    attention_probs01 = attn.get_attention_scores(query, key0, attention_mask)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/diffusers/models/attention_processor.py", line 588, in get_attention_scores
+    attention_scores = torch.baddbmm(
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.00 GiB. GPU 0 has a total capacty of 23.68 GiB of which 4.04 GiB is free. Including non-PyTorch memory, this process has 19.63 GiB memory in use. Of the allocated memory 14.41 GiB is allocated by PyTorch, and 4.97 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF

@@ -1,0 +1,17 @@
+/home/qiyuan/attention-interpolation-diffusion/direct_eval.py:3: DeprecationWarning: 
+Pyarrow will become a required dependency of pandas in the next major release of pandas (pandas 3.0),
+(to allow more performant data types, such as the Arrow string type, and better interoperability with other libraries)
+but was not found to be installed on your system.
+If this would cause problems for you,
+please provide us feedback at https://github.com/pandas-dev/pandas/issues/54466
+        
+  import pandas as pd
+  0%|          | 0/300 [00:00<?, ?it/s]  0%|          | 0/300 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 182, in <module>
+    root_dir = prepare_imgs(corpus_name="cifar100", method_name="attention", boost_ratio=0.3, iters=300, trial_per_iters=5)
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 146, in prepare_imgs
+    prompt1, prompt2 = random.sample(captions_list, 2)
+  File "/home/qiyuan/.conda/envs/AID/lib/python3.10/random.py", line 466, in sample
+    raise TypeError("Population must be a sequence.  For dicts or sets, use sorted(d).")
+TypeError: Population must be a sequence.  For dicts or sets, use sorted(d).
