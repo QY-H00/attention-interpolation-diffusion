@@ -1,28 +1,14 @@
-import torch
-from diffusion import InterpolationDiffusion
-import matplotlib.pyplot as plt
-from PIL import Image
-import torch
-from diffusion import InterpolationDiffusion
 import os
+from PIL import Image
+import matplotlib.pyplot as plt
+import torch
 
-def showImagesHorizontally(list_of_files, output_file):
-    number_of_files = len(list_of_files)
-
-    # Create a figure with subplots
-    _, axs = plt.subplots(1, number_of_files, figsize=(10, 5))
-
-    for i in range(number_of_files):
-        _image = list_of_files[i]
-        axs[i].imshow(_image)
-        axs[i].axis("off")
-        
-    # Save the figure as PNG
-    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.1)
+from diffusion import InterpolationStableDiffusionPipeline
+from utils import show_images_horizontally
 
 if __name__ == "__main__":
     # Load the model
-    model = InterpolationDiffusion()
+    model = InterpolationStableDiffusionPipeline()
     
     # Initialize the generator
     channel = model.pipeline.unet.config.in_channels
@@ -59,4 +45,4 @@ if __name__ == "__main__":
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     print("Target Directory: ", save_dir)
-    showImagesHorizontally(images, os.path.join(save_dir, f"steps={num_inference_steps}_boostR={boost_ratio}.png"))
+    show_images_horizontally(images, os.path.join(save_dir, f"steps={num_inference_steps}_boostR={boost_ratio}.png"))

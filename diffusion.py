@@ -4,10 +4,10 @@ from tqdm.auto import tqdm
 import numpy as np
 import torch
 from torch import FloatTensor
-from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler
+from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel
 from diffusers.models.attention_processor import AttnProcessor
 from transformers import CLIPTextModel, CLIPTokenizer
-from interpolation import linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor
+from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor
 
 
 class InterpolationDiffusionGeneral:
@@ -61,13 +61,13 @@ class InterpolationDiffusionGeneral:
         refine_time_step = self.pipeline.scheduler.timesteps[num_initialize_step:]
         
         # Stage 1: Spatial intialization
-        spatial_interpolate_attn_proc = InterpolationAttnProcessorFull(size=size, is_fused=False, alpha=num_initialize_step, beta=num_initialize_step)
+        spatial_interpolate_attn_proc = InterpolationAttnProcessorWithUncond(size=size, is_fused=False, alpha=num_initialize_step, beta=num_initialize_step)
         self.pipeline.unet.set_attn_processor(processor=spatial_interpolate_attn_proc)
         print("Spatial Initialize...")
         latents = self.pipeline(latents=latents, prompt_embeds=embs, guidance_scale=guidance_scale, output_type="latent", timesteps=initialize_time_step, return_dict=False)[0]
         
         # Stage 2: Semantic refinement
-        refine_interpolate_attn_proc = InterpolationAttnProcessorFull(size=size, is_fused=True, alpha=num_refine_step, beta=num_refine_step)
+        refine_interpolate_attn_proc = InterpolationAttnProcessorWithUncond(size=size, is_fused=True, alpha=num_refine_step, beta=num_refine_step)
         self.pipeline.unet.set_attn_processor(processor=refine_interpolate_attn_proc)
         print("Semantic Refine...")
         latents = self.pipeline(latents=latents, prompt_embeds=embs, guidance_scale=guidance_scale, output_type="latent", timesteps=refine_time_step, return_dict=False)[0]
@@ -80,7 +80,9 @@ class InterpolationDiffusionGeneral:
 
 
 class InterpolationStableDiffusionPipeline:
-    
+    '''
+    Diffusion Pipeline that generates interpolated images
+    '''
     def __init__(self, repo_name="CompVis/stable-diffusion-v1-4", device="cuda", frozen=True):
         self.vae = AutoencoderKL.from_pretrained(repo_name, subfolder="vae", use_safetensors=True, cache_dir="weights")
         self.tokenizer = CLIPTokenizer.from_pretrained(repo_name, subfolder="tokenizer", cache_dir="weights")
@@ -108,6 +110,9 @@ class InterpolationStableDiffusionPipeline:
                 param.requires_grad = False
 
     def prompt_to_embedding(self, prompt):
+        '''
+        Prepare the text prompt for the diffusion process
+        '''
         text_input = self.tokenizer(
             prompt, padding="max_length", max_length=self.tokenizer.model_max_length, truncation=True, return_tensors="pt"
         )
@@ -119,36 +124,27 @@ class InterpolationStableDiffusionPipeline:
         uncond_input = self.tokenizer([""] * 1, padding="max_length", max_length=max_length, return_tensors="pt")
         uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.torch_device))[0]
 
-        text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+        text_embeddings = torch.cat([text_embeddings, uncond_embeddings])
         return text_embeddings
 
-    def retrieve_from_latent(self, latents, text_embeddings, timesteps=25):
-        self.scheduler.set_timesteps(timesteps)
-
-        for t in tqdm(self.scheduler.timesteps):
-            # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
-            latent_model_input = torch.cat([latents] * 2)
-            latent_model_input = self.scheduler.scale_model_input(latent_model_input, timestep=t)
-
-            # predict the noise residual
-            with torch.no_grad():
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
-            # perform guidance
-            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-            noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # compute the previous noisy sample x_t -> x_t-1
-            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
-        latents = 1 / 0.18215 * latents
-        with torch.no_grad():
-            image = self.vae.decode(latents).sample
-        image = (image / 2 + 0.5).clamp(0, 1).squeeze()
-        return image
-
-    def interpolate(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
+    def interpolate(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="fused"):
+        '''
+        Interpolate between two generation
+        
+        Args:
+        latent1: FloatTensor, latent vector of the first image
+        latent2: FloatTensor, latent vector of the second image
+        prompt1: str, text prompt of the first image
+        prompt2: str, text prompt of the second image
+        guide_prompt: str, text prompt for the interpolation
+        size: int, number of interpolations including starting and ending points
+        
+        Returns:
+        List of nterpolated images
+        '''
         # Prepare interpolated inputs
-        self.scheduler.set_timesteps(num_inference_steps)
         latents = sphere_interpolation(latent1, latent2, size)
+        self.scheduler.set_timesteps(num_inference_steps)
         embs1 = self.prompt_to_embedding(prompt1)
         emb1 = embs1[0:1]
         uncond_emb1 = embs1[1:2]
@@ -179,9 +175,9 @@ class InterpolationStableDiffusionPipeline:
             with torch.no_grad():
                 if i < boost_step:
                     if early == "cross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=boost_step, beta=boost_step)
                     elif early == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=boost_step, beta=boost_step)
                     else:
                         raise ValueError("Invalid early parameter")
                 else:
@@ -205,6 +201,80 @@ class InterpolationStableDiffusionPipeline:
         with torch.no_grad():
             image = self.vae.decode(latents).sample
         images = (image / 2 + 0.5).clamp(0, 1)
+        images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
+        return images
+    
+    
+    def interpolate_single(self, it, latent1, latent2, prompt1, prompt2, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
+        '''
+        Interpolate between two generation
+        
+        Args:
+        latent1: FloatTensor, latent vector of the first image
+        latent2: FloatTensor, latent vector of the second image
+        prompt1: str, text prompt of the first image
+        prompt2: str, text prompt of the second image
+        guide_prompt: str, text prompt for the interpolation
+        size: int, number of interpolations including starting and ending points
+        
+        Returns:
+        List of nterpolated images
+        '''
+        # Prepare interpolated inputs
+        self.scheduler.set_timesteps(num_inference_steps)
+        
+        embs1 = self.prompt_to_embedding(prompt1)
+        emb1 = embs1[0:1]
+        uncond_emb1 = embs1[1:2]
+        embs2 = self.prompt_to_embedding(prompt2)
+        emb2 = embs2[0:1]
+        uncond_emb2 = embs2[1:2]
+        
+        latent_t = slerp(latent1, latent2, it)
+        emb_t = torch.lerp(emb1, emb2, it)
+        uncond_emb_t = torch.lerp(uncond_emb1, uncond_emb2, it)
+        
+        latents = torch.cat([latent1, latent_t, latent2], dim=0)
+        embs = torch.cat([emb1, emb_t, emb2], dim=0)
+        uncond_embs = torch.cat([uncond_emb1, uncond_emb_t, uncond_emb2], dim=0)
+
+        i = 0
+        boost_step = int(num_inference_steps * boost_ratio)
+        for t in tqdm(self.scheduler.timesteps):
+            i += 1
+            # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
+            latent_model_input = self.scheduler.scale_model_input(latents, timestep=t)
+            # predict the noise residual
+            with torch.no_grad():
+                if i < boost_step:
+                    if early == "cross":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    elif early == "fused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    else:
+                        raise ValueError("Invalid early parameter")
+                else:
+                    if late == "self":
+                        interpolate_attn_proc = AttnProcessor()
+                    elif late == "fused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    else:
+                        raise ValueError("Invalid early parameter")
+                    
+                self.unet.set_attn_processor(processor=interpolate_attn_proc)
+                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+                attn_proc = AttnProcessor()
+                self.unet.set_attn_processor(processor=attn_proc)
+                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+            # perform guidance
+            noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+        latents = 1 / 0.18215 * latents
+        with torch.no_grad():
+            image = self.vae.decode(latents).sample
+        images = (image / 2 + 0.5).clamp(0, 1)
+        images = (image.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
         return images
 
 
