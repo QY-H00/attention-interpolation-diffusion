@@ -244,6 +244,8 @@ class InterpolationAttnProcessor:
         hidden_states = (1 - coef) * hidden_states01 + coef * hidden_states12
         hidden_states = attn.to_out[0](hidden_states, *args)
         hidden_states = attn.to_out[1](hidden_states)
+        
+        print("Out")
 
         if input_ndim == 4:
             hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)

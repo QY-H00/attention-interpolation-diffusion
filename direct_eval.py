@@ -187,4 +187,4 @@ if __name__ == "__main__":
     # 8177 attention 0.3 0.7 cross fused
     # 8133 embedding
     # 8184 attention 0.0 1.0 cross fused
-    # 8185 attention 1.0 0.0 fused fused
+    # 8191 attention 1.0 0.0 cross fused
