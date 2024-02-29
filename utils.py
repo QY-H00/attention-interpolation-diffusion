@@ -5,8 +5,69 @@ from PIL import Image
 from scipy.stats import wasserstein_distance
 from scipy.linalg import sqrtm
 import torch
+import lpips
+from bayes_opt import BayesianOptimization, SequentialDomainReductionTransformer
 from torchvision.models import inception_v3
 from torchvision.transforms import Normalize
+
+
+def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_model, guide_prompt=None, size=3, num_inference_steps=25, boost_ratio=1.0, early="vfused", late="self", threshold=0.9):
+    def get_smoothness(alpha, beta):
+        if alpha < beta and large_alpha_prior:
+            return 0
+        if alpha > beta and not large_alpha_prior:
+            return 0
+        if alpha == beta:
+            return init_smoothness
+        images = pipe.interpolate_save_gpu(latent1, latent2, prompt1, prompt2, guide_prompt=guide_prompt, 
+                                        size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late, alpha=alpha, beta=beta)
+        smoothness, _, _ = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
+        return smoothness
+    
+    # More prior on alpha and beta
+    images = pipe.interpolate_single(0.5, latent1, latent2, prompt1, prompt2, guide_prompt=guide_prompt, 
+                                        num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+    distances = compute_lpips(images, lpips_model)
+    init_smoothness, _, _ = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
+    dis_A = distances[0]
+    dis_B = distances[1]
+    large_alpha_prior = dis_A < dis_B
+
+    # Bounded region of parameter space
+    pbounds = {'alpha': (20, 30), 'beta': (20, 30)}
+    bounds_transformer = SequentialDomainReductionTransformer(minimum_window=0.1)
+    optimizer = BayesianOptimization(
+        f=get_smoothness,
+        pbounds=pbounds,
+        random_state=1,
+        bounds_transformer=bounds_transformer
+    )
+    target_score = 0.95
+    n_iter = 15
+    alpha_init = [20, 25, 30]
+    beta_init = [20, 25, 30]
+    
+    # Initial probing
+    for alpha in alpha_init:
+        for beta in beta_init:
+            optimizer.probe(params={'alpha': alpha, 'beta': beta}, lazy=False)
+            print(optimizer.res)
+            latest_result = optimizer.res[-1]  # Get the last result
+            latest_score = latest_result['target']
+            if latest_score >= target_score:
+                return alpha, beta
+            
+    for _ in range(n_iter):  # Max iterations
+        optimizer.maximize(init_points=0, n_iter=1)  # One iteration at a time
+        max_score = optimizer.max['target']  # Get the highest score so far
+        if max_score >= target_score:
+            print(f"Stopping early, target of {target_score} reached.")
+            break  # Exit the loop if target is reached or exceeded
+    # optimizer.maximize(init_points=0, n_iter=15)
+    results = optimizer.max
+    alpha = results['params']['alpha']
+    beta = results['params']['beta']
+    return alpha, beta
 
 
 def show_images_horizontally(list_of_files, output_file):
@@ -14,17 +75,23 @@ def show_images_horizontally(list_of_files, output_file):
     Visualize the list of images horizontally and save the figure as PNG.
     '''
     number_of_files = len(list_of_files)
+    
+    heights = [a[0].shape[0] for a in list_of_files]
+    widths = [a.shape[1] for a in list_of_files[0]]
+
+    fig_width = 8.  # inches
+    fig_height = fig_width * sum(heights) / sum(widths)
 
     # Create a figure with subplots
-    _, axs = plt.subplots(1, number_of_files, figsize=(10, 5))
-
+    _, axs = plt.subplots(1, number_of_files, figsize=(fig_width * number_of_files, fig_height))
+    plt.tight_layout()
     for i in range(number_of_files):
         _image = list_of_files[i]
         axs[i].imshow(_image)
         axs[i].axis("off")
         
     # Save the figure as PNG
-    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.1)
+    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.25)
         
         
 def save_image(image, file_name):
@@ -57,6 +124,23 @@ def load_and_process_images(load_dir):
             img_array = np.asarray(img) / 255.0  # Convert to numpy array and scale pixel values to [0, 1]
             images.append(img_array)
     return images
+
+
+def compute_lpips(images, lpips_model, device="cuda"):
+    images = torch.tensor(images).to(device).float()
+    images = torch.permute(images, (0, 3, 1, 2))
+    normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    images = normalize(images)
+    distances = []
+    for i in range(images.shape[0]):
+        if i == images.shape[0] - 1:
+            break
+        img1 = images[i].unsqueeze(0)
+        img2 = images[i + 1].unsqueeze(0)
+        loss = lpips_model(img1, img2)
+        distances.append(loss.item())
+    distances = np.array(distances)
+    return distances
 
 
 def compute_wasserstein_distances(images):
@@ -98,7 +182,7 @@ def compute_gini(distances):
     return gini
 
 
-def compute_smoothness_and_efficiency(images):
+def compute_smoothness_and_efficiency(images, lpips_model, device="cuda"):
     '''
     Compute the smoothness and efficiency of the input images.
     
@@ -106,13 +190,14 @@ def compute_smoothness_and_efficiency(images):
     - images: The input images as numpy array with shape (N, H, W, C).
     
     Returns:
-    - smoothness: Variance of the Wasserstein distances of consecutive images.
-    - efficiency: Mean of the Wasserstein distances of consecutive images.
+    - smoothness: One minus gini index of LPIPS of consecutive images.
+    - efficiency: Mean of LPIPS of consecutive images.
     '''
-    wasserstein_distances = compute_wasserstein_distances(images)
-    smoothness = np.var(wasserstein_distances)
-    efficiency = np.mean(wasserstein_distances)
-    return smoothness, efficiency
+    distances = compute_lpips(images, lpips_model, device)
+    smoothness = 1 - compute_gini(distances)
+    avg_inception_distance = np.mean(distances)
+    max_inception_distance = np.amax(distances)
+    return smoothness, avg_inception_distance, max_inception_distance
 
 
 def calculate_fid(act1, act2):

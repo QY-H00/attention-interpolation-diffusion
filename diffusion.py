@@ -7,7 +7,7 @@ from torch import FloatTensor
 from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel
 from diffusers.models.attention_processor import AttnProcessor
 from transformers import CLIPTextModel, CLIPTokenizer
-from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor, InterpolationAttnProcessorKeyValue
+from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor, InterpolationAttnProcessorQuery, InterpolationAttnProcessorKeyValue, generate_beta_tensor
 
 
 class InterpolationDiffusionGeneral:
@@ -205,7 +205,43 @@ class InterpolationStableDiffusionPipeline:
         return images
     
     
-    def interpolate_single(self, it, latent1, latent2, prompt1, prompt2, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
+    def interpolate_save_gpu(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="fused", alpha=None, beta=None):
+        '''
+        Interpolate between two generation
+        
+        Args:
+        latent1: FloatTensor, latent vector of the first image
+        latent2: FloatTensor, latent vector of the second image
+        prompt1: str, text prompt of the first image
+        prompt2: str, text prompt of the second image
+        guide_prompt: str, text prompt for the interpolation
+        size: int, number of interpolations including starting and ending points
+        
+        Returns:
+        List of nterpolated images
+        '''
+        # Prepare interpolated inputs
+        if alpha is None:
+            alpha = num_inference_steps
+        if beta is None:
+            beta = num_inference_steps
+        betas = generate_beta_tensor(size, alpha=alpha, beta=beta)
+        final_images = None
+        for i in range(size-2):
+            it = betas[i+1].item()
+            images = self.interpolate_single(it, latent1, latent2, prompt1, prompt2, guide_prompt, num_inference_steps, boost_ratio, early=early, late=late)
+            if size == 3:
+                return images
+            if i == 0:
+                final_images = images[:2]
+            elif i == size-3:
+                final_images = np.concatenate([final_images, images[1:]], axis=0)
+            else:
+                final_images = np.concatenate([final_images, images[1:2]], axis=0)
+        return final_images
+
+
+    def interpolate_single(self, it, latent1, latent2, prompt1, prompt2, guide_prompt=None, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
         '''
         Interpolate between two generation
         
@@ -229,9 +265,13 @@ class InterpolationStableDiffusionPipeline:
         embs2 = self.prompt_to_embedding(prompt2)
         emb2 = embs2[0:1]
         uncond_emb2 = embs2[1:2]
-        
+
         latent_t = slerp(latent1, latent2, it)
-        emb_t = torch.lerp(emb1, emb2, it)
+        if guide_prompt is not None:
+            embs_guide = self.prompt_to_embedding(guide_prompt)
+            emb_t = embs_guide[0:1]
+        else:
+            emb_t = torch.lerp(emb1, emb2, it)
         uncond_emb_t = torch.lerp(uncond_emb1, uncond_emb2, it)
         
         latents = torch.cat([latent1, latent_t, latent2], dim=0)
@@ -247,17 +287,29 @@ class InterpolationStableDiffusionPipeline:
             # predict the noise residual
             with torch.no_grad():
                 if i < boost_step:
-                    if early == "cross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
-                    elif early == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
+                    if early == "vcross":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=1, beta=1)
+                    elif early == "vfused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=1, beta=1)
+                    elif early == "scross":
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=False, alpha=1, beta=1)
+                    elif early == "sfused":
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=True, alpha=1, beta=1)
+                    elif early == "self":
+                        interpolate_attn_proc = AttnProcessor()
                     else:
                         raise ValueError("Invalid early parameter")
                 else:
-                    if late == "self":
+                    if late == "vcross":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=1, beta=1)
+                    elif late == "vfused":
+                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=1, beta=1)
+                    elif late == "scross":
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=False, alpha=1, beta=1)
+                    elif late == "sfused":
+                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=True, alpha=1, beta=1)
+                    elif late == "self":
                         interpolate_attn_proc = AttnProcessor()
-                    elif late == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=num_inference_steps - boost_step, beta=num_inference_steps - boost_step)
                     else:
                         raise ValueError("Invalid early parameter")
                     
@@ -274,7 +326,7 @@ class InterpolationStableDiffusionPipeline:
         with torch.no_grad():
             image = self.vae.decode(latents).sample
         images = (image / 2 + 0.5).clamp(0, 1)
-        images = (image.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
+        images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
         return images
 
 

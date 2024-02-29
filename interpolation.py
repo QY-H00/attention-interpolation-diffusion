@@ -158,6 +158,7 @@ class InterpolationAttnProcessor:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
         else:
             ts = [0, t, 1]
+            ts = torch.tensor(ts)
             size = 3
         ts[0] = 0
         ts[-1] = 1
@@ -226,14 +227,12 @@ class InterpolationAttnProcessor:
             value = attn.head_to_batch_dim(value)
             key2 = torch.cat([key, key2], dim=-2)
             value2 = torch.cat([value, value2], dim=-2)
+            key0 = torch.cat([key, key0], dim=-2)
+            value0 = torch.cat([value, value0], dim=-2)
 
         attention_probs12 = attn.get_attention_scores(query, key2, attention_mask)
         hidden_states12 = torch.bmm(attention_probs12, value2)
         hidden_states12 = attn.batch_to_head_dim(hidden_states12)
-        
-        if self.is_fused:
-            key0 = torch.cat([key, key0], dim=-2)
-            value0 = torch.cat([value, value0], dim=-2)
 
         attention_probs01 = attn.get_attention_scores(query, key0, attention_mask)
         hidden_states01 = torch.bmm(attention_probs01, value0)
@@ -244,8 +243,6 @@ class InterpolationAttnProcessor:
         hidden_states = (1 - coef) * hidden_states01 + coef * hidden_states12
         hidden_states = attn.to_out[0](hidden_states, *args)
         hidden_states = attn.to_out[1](hidden_states)
-        
-        print("Out")
 
         if input_ndim == 4:
             hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
@@ -263,8 +260,13 @@ class InterpolationAttnProcessorKeyValue:
     Default processor for performing attention-related computations.
     """
 
-    def __init__(self, size=10, is_fused=False, alpha=1, beta=1, torch_device="cuda"):
-        ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
+    def __init__(self, t=None, size=10, is_fused=False, alpha=1, beta=1, torch_device="cuda"):
+        if t is None:
+            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
+        else:
+            ts = [0, t, 1]
+            ts = torch.tensor(ts)
+            size = 3
         ts[0] = 0
         ts[-1] = 1
         self.size = size
@@ -351,9 +353,117 @@ class InterpolationAttnProcessorKeyValue:
         hidden_states = hidden_states / attn.rescale_output_factor
 
         return hidden_states
-   
 
-def linear_interpolation(l1: FloatTensor, l2: FloatTensor, size=5):
+
+class InterpolationAttnProcessorQuery:
+    r"""
+    Default processor for performing attention-related computations.
+    """
+
+    def __init__(self, t=None, size=10, is_fused=False, alpha=1, beta=1, torch_device="cuda"):
+        if t is None:
+            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
+        else:
+            ts = [0, t, 1]
+            ts = torch.tensor(ts)
+            size = 3
+        ts[0] = 0
+        ts[-1] = 1
+        self.size = size
+        self.coef = ts.to(torch_device)
+        self.is_fused = is_fused
+
+    def __call__(
+        self,
+        attn,
+        hidden_states: torch.FloatTensor,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        temb: Optional[torch.FloatTensor] = None,
+        scale: float = 1.0,
+    ) -> torch.Tensor:
+        residual = hidden_states
+
+        args = () if USE_PEFT_BACKEND else (scale,)
+
+        if attn.spatial_norm is not None:
+            hidden_states = attn.spatial_norm(hidden_states, temb)
+
+        input_ndim = hidden_states.ndim
+
+        if input_ndim == 4:
+            batch_size, channel, height, width = hidden_states.shape
+            hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
+
+        batch_size, sequence_length, _ = (
+            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
+        )
+        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
+
+        if attn.group_norm is not None:
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+        query = attn.to_q(hidden_states, *args)
+
+        if encoder_hidden_states is None:
+            encoder_hidden_states = hidden_states
+        elif attn.norm_cross:
+            encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+
+        key = attn.to_k(encoder_hidden_states, *args)
+        value = attn.to_v(encoder_hidden_states, *args)
+
+        query0 = query[0:1]
+        query2 = query[-1:]
+        
+
+        query0 = torch.cat([query0]*(self.size))
+        query2 = torch.cat([query2]*(self.size))
+        
+        key = attn.head_to_batch_dim(key)
+        value = attn.head_to_batch_dim(value)
+
+        coef = self.coef.reshape(-1, 1, 1)
+
+        if self.is_fused:
+            query_cross = (1 - coef) * query0 + coef * query2
+            query_cross = attn.head_to_batch_dim(query_cross)
+            attention_probs = attn.get_attention_scores(query_cross, key, attention_mask)
+            hidden_states = torch.bmm(attention_probs, value)
+            hidden_states = attn.batch_to_head_dim(hidden_states)
+            hidden_states = attn.to_out[0](hidden_states, *args)
+            hidden_states = attn.to_out[1](hidden_states)
+        else:
+            query0 = attn.head_to_batch_dim(query0)
+            query2 = attn.head_to_batch_dim(query2)
+            # query = attn.head_to_batch_dim(query)
+            # query0 = torch.cat([query, query0], dim=-2)
+            # query2 = torch.cat([query, query2], dim=-2)
+
+            attention_probs0 = attn.get_attention_scores(query0, key, attention_mask)
+            hidden_states0 = torch.bmm(attention_probs0, value)
+            hidden_states0 = attn.batch_to_head_dim(hidden_states0)
+            
+            attention_probs2 = attn.get_attention_scores(query2, key, attention_mask)
+            hidden_states2 = torch.bmm(attention_probs2, value)
+            hidden_states2 = attn.batch_to_head_dim(hidden_states2)
+            
+            hidden_states = (1 - coef) * hidden_states0 + coef * hidden_states2
+            hidden_states = attn.to_out[0](hidden_states, *args)
+            hidden_states = attn.to_out[1](hidden_states)
+
+        if input_ndim == 4:
+            hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
+
+        if attn.residual_connection:
+            hidden_states = hidden_states + residual
+
+        hidden_states = hidden_states / attn.rescale_output_factor
+
+        return hidden_states
+     
+
+def linear_interpolation(l1: FloatTensor, l2: FloatTensor, ts=None, size=5):
     '''
     Linear interpolation
     
@@ -368,10 +478,15 @@ def linear_interpolation(l1: FloatTensor, l2: FloatTensor, size=5):
     assert l1.shape == l2.shape, "shapes of l1 and l2 must match"
     
     res = []
-    for i in range(size):
-        t = i / (size - 1)
-        li = lerp(l1, l2, t)
-        res.append(li)
+    if ts is not None:
+        for t in ts:
+            li = lerp(l1, l2, t)
+            res.append(li)
+    else:
+        for i in range(size):
+            t = i / (size - 1)
+            li = lerp(l1, l2, t)
+            res.append(li)
     res = torch.cat(res, dim=0)
     return res
 
@@ -435,7 +550,6 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
 
     # if no elements are lerpable, our vectors become 0-dimensional, preventing broadcasting
     if gotta_lerp.any():
-        # print("no slerp")
         lerped: FloatTensor = lerp(v0, v1, t)
 
         out: FloatTensor = lerped.where(gotta_lerp.unsqueeze(-1), out)

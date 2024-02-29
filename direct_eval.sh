@@ -1,3 +1,4 @@
+nvidia-smi
 cd attention-interpolation-diffusion
 source ~/.bashrc
 eval "$(conda shell.bash hook)"

@@ -2,47 +2,58 @@ import os
 from PIL import Image
 import matplotlib.pyplot as plt
 import torch
+import lpips
+from utils import compute_smoothness_and_efficiency, compute_lpips
 
 from diffusion import InterpolationStableDiffusionPipeline
-from utils import show_images_horizontally
+from utils import show_images_horizontally, baysian_prior_selection
 
 if __name__ == "__main__":
-    # Load the model
-    model = InterpolationStableDiffusionPipeline()
+    
+    root_dir = os.path.join("results", "qualitative")
+    os.makedirs(root_dir, exist_ok=True)
+    pipe = InterpolationStableDiffusionPipeline()
     
     # Initialize the generator
-    channel = model.pipeline.unet.config.in_channels
-    height = model.pipeline.unet.config.sample_size * model.pipeline.vae_scale_factor
-    width = model.pipeline.unet.config.sample_size * model.pipeline.vae_scale_factor
-    TORCH_DEVICE = "cuda"
+    vae_scale_factor = 8
+    channel = pipe.unet.config.in_channels
+    height = pipe.unet.config.sample_size * vae_scale_factor
+    width = pipe.unet.config.sample_size * vae_scale_factor
+    torch_device = "cuda"
+    
+    
+    prompt1 = "an airplane"
+    prompt2 = "a deer"
+    file_name = '{' + prompt1[:20] + '}_{' + prompt2[:20] + '}'
+    file_path = os.path.join(root_dir, file_name)
     generator = torch.cuda.manual_seed(0)
-    
-    # Load the latent vectors
-    latent1 = torch.randn(
-        (1, channel, height // model.pipeline.vae_scale_factor, width // model.pipeline.vae_scale_factor),
+        
+    latent = torch.randn(
+        (1, channel, height // vae_scale_factor, width // vae_scale_factor),
         generator=generator,
-        device=TORCH_DEVICE,
+        device=torch_device,
     )
     
-    latent2 = torch.randn(
-        (1, channel, height // model.pipeline.vae_scale_factor, width // model.pipeline.vae_scale_factor),
-        generator=generator,
-        device=TORCH_DEVICE,
-    )
+    num_inference_steps = 25
+    lpips_model = lpips.LPIPS(net="vgg").to("cuda")
     
-    # Load the prompt
-    prompt1 = "A painting of a cat"
-    prompt2 = "A painting of a dog"
+    boost_ratio = 1.0
+    early = "vfused"
+    late = "self"
+    guide_prompt = None
     
-    # Set the number of timesteps and boost ratio
-    num_inference_steps = 50
-    boost_ratio = 0.3
+    if boost_ratio == 1.0:
+        file_suffix = f"_{early}"
+    elif boost_ratio == 0.0:
+        file_suffix = f"_{late}"
+    else:
+        file_suffix = f"_{early}_{late}"
     
-    # Interpolate
-    images = model.interpolate(latent1, latent2, prompt1, prompt2, guide_prompt=None, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio)
-    
-    save_dir = os.path.join("results", "{" + prompt1 + "}" + "-" + "{" + prompt2 + "}")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    print("Target Directory: ", save_dir)
-    show_images_horizontally(images, os.path.join(save_dir, f"steps={num_inference_steps}_boostR={boost_ratio}.png"))
+    alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=guide_prompt, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+    images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=guide_prompt, size=7, 
+                                       num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late, alpha=alpha, beta=beta)
+    smoothness, efficiency, max_distance = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
+    print(f"{file_suffix}", smoothness, efficiency, max_distance)
+    if guide_prompt is not None:
+        guide_prompt = guide_prompt[:20]
+    show_images_horizontally(images, file_path + f"{file_suffix}_{str(guide_prompt)}.png")
