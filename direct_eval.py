@@ -1,3 +1,4 @@
+import argparse
 import os
 import random
 import pandas as pd
@@ -208,7 +209,7 @@ def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is
             
             num_inference_steps = 25
             
-            if method_name == "embedding":
+            if method_name == "baseline":
                 images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=None, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self")
             elif method_name == "attention":
                 if is_guide:
@@ -226,12 +227,14 @@ def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is
             
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--corpus_name', type=str, help='The name of the corpus')
+    parser.add_argument('--method_name', type=str, help='The name of the method')
+    parser.add_argument('--early', default='self', nargs='?', type=str, help='Early attention interpolation mechanism or Self attention')
+    parser.add_argument('--is_guide', default=False, nargs='?', type=bool, help='Whether to use guide prompt')
+    args = parser.parse_args()
+    
     lpips_model = lpips.LPIPS(net="vgg").to("cuda")
-    root_dir = prepare_imgs(lpips_model, corpus_name="cifar10", method_name="attention", is_guide=True, boost_ratio=0.5, early="vfused", late="self", iters=100, trial_per_iters=1, size=7)
+    root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, is_guide=True, boost_ratio=1.0, early=args.early, late="self", iters=100, trial_per_iters=1, size=7)
     eval_imgs(root_dir)
     sort_source_and_interpolated(root_dir)
-    # python -m pytorch_fid path/to/source path/to/interpolated
-    # 8288 0.0 fused fused
-    # 8293 1.0 fused fused
-    # 8294 0.5 fused fused
-    # 8291 embedding
