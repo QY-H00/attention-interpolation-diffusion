@@ -122,6 +122,7 @@ def eval_imgs(root_dir):
     E = 0
     M = 0
     device = "cuda"
+    t = 0
     lpips_model = lpips.LPIPS(net='vgg').to(device)
     num_pairs = len(os.listdir(pairwise_dir))
     for pair_dir in os.listdir(pairwise_dir):
@@ -139,10 +140,10 @@ def eval_imgs(root_dir):
             S += smoothness
             E += efficiency
             M += max_distance
-    num_sample = num_pairs * num_tirals
-    S /= num_sample
-    E /= num_sample
-    M /= num_sample
+            t += 1
+    S /= t
+    E /= t
+    M /= t
     eval_file = os.path.join(root_dir, "eval.txt")
     with open(eval_file, 'w') as f:
         f.write(f"Smoothness: {S:.4f}, Mean Inception Distance: {E:.4f}, Max Inception Distance: {M:.4f}")
@@ -184,6 +185,7 @@ def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is
     results_dir = create_results_dir(method_name_spec, corpus_name)
     pairwise_dir = os.path.join(results_dir, "pairwise")
     os.makedirs(pairwise_dir, exist_ok=True)
+    print(pairwise_dir)
     
     for _ in tqdm(range(iters)):
         prompt1, prompt2 = random.sample(captions_list, 2)
@@ -231,10 +233,11 @@ if __name__ == "__main__":
     parser.add_argument('--corpus_name', type=str, help='The name of the corpus')
     parser.add_argument('--method_name', type=str, help='The name of the method')
     parser.add_argument('--early', default='self', nargs='?', type=str, help='Early attention interpolation mechanism or Self attention')
-    parser.add_argument('--is_guide', default=False, nargs='?', type=bool, help='Whether to use guide prompt')
+    parser.add_argument('--is_guide', action='store_true', help='Set the flag to True')
     args = parser.parse_args()
     
-    lpips_model = lpips.LPIPS(net="vgg").to("cuda")
-    root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, is_guide=True, boost_ratio=1.0, early=args.early, late="self", iters=100, trial_per_iters=1, size=7)
+    # lpips_model = lpips.LPIPS(net="vgg").to("cuda")
+    # root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, is_guide=args.is_guide, boost_ratio=1.0, early=args.early, late="self", iters=100, trial_per_iters=1, size=7)
+    root_dir = "/home/qiyuan/attention-interpolation-diffusion/results/direct_eval/baseline/laion5b"
     eval_imgs(root_dir)
     sort_source_and_interpolated(root_dir)

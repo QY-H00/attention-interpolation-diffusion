@@ -1,11 +1,9 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=6:mem=16gb:ngpus=1
-#PBS -o ~/attetion-interpolation-diffusion/exp/log/output_vfused_laion5b_guidance.log
-#PBS -e ~/attetion-interpolation-diffusion/exp/log/error_vfused_laion5b_guidance.log
 
 nvidia-smi
 cd attention-interpolation-diffusion
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
 conda activate AID
-python direct_eval.py --corpus_name laion5b --method_name attention --early vfused --is_guide True
+python direct_eval.py --corpus_name laion5b --method_name attention --early vfused --is_guide

@@ -40,7 +40,8 @@ def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_mode
         f=get_smoothness,
         pbounds=pbounds,
         random_state=1,
-        bounds_transformer=bounds_transformer
+        bounds_transformer=bounds_transformer,
+        allow_duplicate_points=True
     )
     target_score = 0.95
     n_iter = 15
@@ -51,7 +52,6 @@ def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_mode
     for alpha in alpha_init:
         for beta in beta_init:
             optimizer.probe(params={'alpha': alpha, 'beta': beta}, lazy=False)
-            print(optimizer.res)
             latest_result = optimizer.res[-1]  # Get the last result
             latest_score = latest_result['target']
             if latest_score >= target_score:
@@ -117,6 +117,7 @@ def load_and_process_images(load_dir):
     - images: The images as numpy array with shape (N, H, W, C).
     '''
     images = []
+    print(load_dir)
     filenames = sorted(os.listdir(load_dir), key=lambda x: int(x.split('.')[0]))  # Ensure the files are sorted numerically
     for filename in filenames:
         if filename.endswith('.jpg'):

@@ -1,0 +1,107 @@
+Thu Feb 29 13:34:40 2024       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 545.23.08              Driver Version: 545.23.08    CUDA Version: 12.3     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA RTX A5000               On  | 00000000:23:00.0 Off |                  Off |
+| 30%   31C    P8              18W / 230W |      2MiB / 24564MiB |      0%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+Setting up [LPIPS] perceptual loss: trunk [vgg], v[0.1], spatial [off]
+Loading model from: /home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/lpips/weights/v0.1/vgg.pth
+Setting up [LPIPS] perceptual loss: trunk [vgg], v[0.1], spatial [off]
+Loading model from: /home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/lpips/weights/v0.1/vgg.pth
+Smoothness: 0.6540, Mean Inception Distance: 0.2935, Max Inception Distance: 0.6720
+Smoothness: 0.8147, Mean Inception Distance: 0.5164, Max Inception Distance: 0.7439
+Smoothness: 0.4914, Mean Inception Distance: 0.2341, Max Inception Distance: 0.6399
+Smoothness: 0.5475, Mean Inception Distance: 0.2786, Max Inception Distance: 0.6534
+Smoothness: 0.6629, Mean Inception Distance: 0.2386, Max Inception Distance: 0.5460
+Smoothness: 0.8409, Mean Inception Distance: 0.4879, Max Inception Distance: 0.6825
+Smoothness: 0.8555, Mean Inception Distance: 0.4947, Max Inception Distance: 0.7422
+Smoothness: 0.6043, Mean Inception Distance: 0.2681, Max Inception Distance: 0.7095
+Smoothness: 0.6825, Mean Inception Distance: 0.2770, Max Inception Distance: 0.6097
+Smoothness: 0.6005, Mean Inception Distance: 0.3242, Max Inception Distance: 0.6735
+Smoothness: 0.7826, Mean Inception Distance: 0.4649, Max Inception Distance: 0.7030
+Smoothness: 0.6298, Mean Inception Distance: 0.3082, Max Inception Distance: 0.6864
+Smoothness: 0.7580, Mean Inception Distance: 0.3959, Max Inception Distance: 0.6951
+Smoothness: 0.6558, Mean Inception Distance: 0.2997, Max Inception Distance: 0.5935
+Smoothness: 0.8890, Mean Inception Distance: 0.4839, Max Inception Distance: 0.6066
+Smoothness: 0.8356, Mean Inception Distance: 0.4551, Max Inception Distance: 0.6599
+Smoothness: 0.6641, Mean Inception Distance: 0.3655, Max Inception Distance: 0.6898
+Smoothness: 0.8465, Mean Inception Distance: 0.4788, Max Inception Distance: 0.6567
+Smoothness: 0.7763, Mean Inception Distance: 0.4522, Max Inception Distance: 0.7466
+Smoothness: 0.6560, Mean Inception Distance: 0.3722, Max Inception Distance: 0.7284
+Smoothness: 0.7341, Mean Inception Distance: 0.3717, Max Inception Distance: 0.6902
+Smoothness: 0.6397, Mean Inception Distance: 0.3730, Max Inception Distance: 0.7486
+Smoothness: 0.7236, Mean Inception Distance: 0.3684, Max Inception Distance: 0.7517
+Smoothness: 0.8061, Mean Inception Distance: 0.4483, Max Inception Distance: 0.6618
+Smoothness: 0.7931, Mean Inception Distance: 0.3617, Max Inception Distance: 0.5670
+Smoothness: 0.8306, Mean Inception Distance: 0.4759, Max Inception Distance: 0.6093
+Smoothness: 0.7738, Mean Inception Distance: 0.4114, Max Inception Distance: 0.7169
+Smoothness: 0.8491, Mean Inception Distance: 0.4731, Max Inception Distance: 0.6223
+Smoothness: 0.9343, Mean Inception Distance: 0.5260, Max Inception Distance: 0.5931
+Smoothness: 0.6740, Mean Inception Distance: 0.3571, Max Inception Distance: 0.6690
+Smoothness: 0.8414, Mean Inception Distance: 0.4435, Max Inception Distance: 0.6480
+Smoothness: 0.7142, Mean Inception Distance: 0.2518, Max Inception Distance: 0.5745
+Smoothness: 0.6563, Mean Inception Distance: 0.3912, Max Inception Distance: 0.7140
+Smoothness: 0.6299, Mean Inception Distance: 0.3024, Max Inception Distance: 0.5997
+Smoothness: 0.8653, Mean Inception Distance: 0.4336, Max Inception Distance: 0.5470
+Smoothness: 0.8020, Mean Inception Distance: 0.4258, Max Inception Distance: 0.6702
+Smoothness: 0.8451, Mean Inception Distance: 0.4328, Max Inception Distance: 0.6808
+Smoothness: 0.7611, Mean Inception Distance: 0.3981, Max Inception Distance: 0.6338
+Smoothness: 0.8355, Mean Inception Distance: 0.4342, Max Inception Distance: 0.6380
+Smoothness: 0.8246, Mean Inception Distance: 0.3834, Max Inception Distance: 0.5685
+Smoothness: 0.8691, Mean Inception Distance: 0.4627, Max Inception Distance: 0.6831
+Smoothness: 0.7669, Mean Inception Distance: 0.4067, Max Inception Distance: 0.6090
+Smoothness: 0.6030, Mean Inception Distance: 0.3553, Max Inception Distance: 0.7624
+Smoothness: 0.7280, Mean Inception Distance: 0.3775, Max Inception Distance: 0.6368
+Smoothness: 0.7554, Mean Inception Distance: 0.3726, Max Inception Distance: 0.6717
+Smoothness: 0.8188, Mean Inception Distance: 0.4123, Max Inception Distance: 0.5934
+Smoothness: 0.5764, Mean Inception Distance: 0.3168, Max Inception Distance: 0.7596
+Smoothness: 0.6323, Mean Inception Distance: 0.3108, Max Inception Distance: 0.6874
+Smoothness: 0.7719, Mean Inception Distance: 0.3934, Max Inception Distance: 0.6546
+Smoothness: 0.7465, Mean Inception Distance: 0.4216, Max Inception Distance: 0.7226
+Smoothness: 0.6659, Mean Inception Distance: 0.2896, Max Inception Distance: 0.6336
+Smoothness: 0.6874, Mean Inception Distance: 0.4063, Max Inception Distance: 0.7469
+Smoothness: 0.8077, Mean Inception Distance: 0.4466, Max Inception Distance: 0.6223
+Smoothness: 0.7300, Mean Inception Distance: 0.3554, Max Inception Distance: 0.6741
+Smoothness: 0.8072, Mean Inception Distance: 0.3824, Max Inception Distance: 0.6319
+Smoothness: 0.6568, Mean Inception Distance: 0.3285, Max Inception Distance: 0.6176
+Smoothness: 0.6801, Mean Inception Distance: 0.3983, Max Inception Distance: 0.7217
+Smoothness: 0.8234, Mean Inception Distance: 0.4360, Max Inception Distance: 0.6390
+Smoothness: 0.8208, Mean Inception Distance: 0.4344, Max Inception Distance: 0.6880
+Smoothness: 0.8187, Mean Inception Distance: 0.4224, Max Inception Distance: 0.5898
+Smoothness: 0.7221, Mean Inception Distance: 0.3826, Max Inception Distance: 0.6562
+Smoothness: 0.6560, Mean Inception Distance: 0.3234, Max Inception Distance: 0.7268
+Smoothness: 0.8491, Mean Inception Distance: 0.4776, Max Inception Distance: 0.6450
+Smoothness: 0.7715, Mean Inception Distance: 0.3358, Max Inception Distance: 0.5534
+Smoothness: 0.7416, Mean Inception Distance: 0.3672, Max Inception Distance: 0.6669
+Smoothness: 0.7361, Mean Inception Distance: 0.3903, Max Inception Distance: 0.6637
+Smoothness: 0.7296, Mean Inception Distance: 0.3313, Max Inception Distance: 0.7304
+Smoothness: 0.7132, Mean Inception Distance: 0.4165, Max Inception Distance: 0.7225
+Smoothness: 0.8735, Mean Inception Distance: 0.4077, Max Inception Distance: 0.5490
+Smoothness: 0.7484, Mean Inception Distance: 0.3586, Max Inception Distance: 0.6065
+Smoothness: 0.8613, Mean Inception Distance: 0.5062, Max Inception Distance: 0.6486
+Smoothness: 0.6211, Mean Inception Distance: 0.3016, Max Inception Distance: 0.5852
+Smoothness: 0.6813, Mean Inception Distance: 0.4058, Max Inception Distance: 0.7376
+Smoothness: 0.7314, Mean Inception Distance: 0.3748, Max Inception Distance: 0.6918
+Smoothness: 0.9011, Mean Inception Distance: 0.4642, Max Inception Distance: 0.6054
+Smoothness: 0.6769, Mean Inception Distance: 0.3605, Max Inception Distance: 0.7078
+Smoothness: 0.7470, Mean Inception Distance: 0.3224, Max Inception Distance: 0.5740
+Smoothness: 0.7985, Mean Inception Distance: 0.3913, Max Inception Distance: 0.6289
+Smoothness: 0.6599, Mean Inception Distance: 0.2622, Max Inception Distance: 0.5731
+Smoothness: 0.7240, Mean Inception Distance: 0.4437, Max Inception Distance: 0.7991
+Smoothness: 0.7094, Mean Inception Distance: 0.3942, Max Inception Distance: 0.7424
+Smoothness: 0.6781, Mean Inception Distance: 0.3236, Max Inception Distance: 0.6223
+Smoothness: 0.7988, Mean Inception Distance: 0.3901, Max Inception Distance: 0.6276
