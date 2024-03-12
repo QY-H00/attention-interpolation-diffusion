@@ -2,6 +2,7 @@ __pycache__/
 results/
 weights/
 corpus/
+my_diffusers/
 exp_fid.ipynb
 exp_appendix.ipynb
 exp_ablation.ipynb
