@@ -1,0 +1,50 @@
+/home/qiyuan/attention-interpolation-diffusion/direct_eval.py:4: DeprecationWarning: 
+Pyarrow will become a required dependency of pandas in the next major release of pandas (pandas 3.0),
+(to allow more performant data types, such as the Arrow string type, and better interoperability with other libraries)
+but was not found to be installed on your system.
+If this would cause problems for you,
+please provide us feedback at https://github.com/pandas-dev/pandas/issues/54466
+        
+  import pandas as pd
+/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=VGG16_Weights.IMAGENET1K_V1`. You can also use `weights=VGG16_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+  0%|          | 0/100 [00:00<?, ?it/s]
+  0%|          | 0/25 [00:00<?, ?it/s][A
+  4%|▍         | 1/25 [00:00<00:10,  2.39it/s][A
+  8%|▊         | 2/25 [00:00<00:07,  3.02it/s][A
+ 12%|█▏        | 3/25 [00:00<00:06,  3.30it/s][A
+ 16%|█▌        | 4/25 [00:01<00:06,  3.44it/s][A
+ 20%|██        | 5/25 [00:01<00:05,  3.52it/s][A
+ 24%|██▍       | 6/25 [00:01<00:05,  3.57it/s][A
+ 28%|██▊       | 7/25 [00:02<00:04,  3.60it/s][A
+ 32%|███▏      | 8/25 [00:02<00:04,  3.62it/s][A
+ 36%|███▌      | 9/25 [00:02<00:04,  3.64it/s][A
+ 40%|████      | 10/25 [00:02<00:04,  3.66it/s][A
+ 44%|████▍     | 11/25 [00:03<00:03,  3.68it/s][A
+ 48%|████▊     | 12/25 [00:03<00:03,  3.69it/s][A
+ 52%|█████▏    | 13/25 [00:03<00:03,  3.69it/s][A
+ 56%|█████▌    | 14/25 [00:03<00:02,  3.69it/s][A
+ 60%|██████    | 15/25 [00:04<00:02,  3.70it/s][A
+ 64%|██████▍   | 16/25 [00:04<00:02,  3.70it/s][A
+ 68%|██████▊   | 17/25 [00:04<00:02,  3.70it/s][A
+ 72%|███████▏  | 18/25 [00:05<00:01,  3.69it/s][A
+ 76%|███████▌  | 19/25 [00:05<00:01,  3.69it/s][A
+ 80%|████████  | 20/25 [00:05<00:01,  3.69it/s][A
+ 84%|████████▍ | 21/25 [00:05<00:01,  3.69it/s][A
+ 88%|████████▊ | 22/25 [00:06<00:00,  3.69it/s][A
+ 92%|█████████▏| 23/25 [00:06<00:00,  3.69it/s][A
+ 96%|█████████▌| 24/25 [00:06<00:00,  3.69it/s][A
+100%|██████████| 25/25 [00:06<00:00,  3.68it/s][A100%|██████████| 25/25 [00:06<00:00,  3.61it/s]
+  0%|          | 0/100 [00:07<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 260, in <module>
+    root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, is_guide=args.is_guide, boost_ratio=args.boost_ratio, early=args.early, late="self", iters=100, trial_per_iters=1, size=7, beta_prior=args.beta_prior)
+  File "/home/qiyuan/attention-interpolation-diffusion/direct_eval.py", line 230, in prepare_imgs
+    images = pipe.interpolate_naive(latent, latent, prompt1, prompt2, mode='image')
+  File "/home/qiyuan/attention-interpolation-diffusion/diffusion.py", line 261, in interpolate_naive
+    images = linear_interpolation(image_A, image_B, size=size)
+  File "/home/qiyuan/attention-interpolation-diffusion/interpolation.py", line 482, in linear_interpolation
+    for t in ts:
+TypeError: 'int' object is not iterable

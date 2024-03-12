@@ -1,6 +1,7 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=6:mem=16gb:ngpus=1
 
+cd ~/
 nvidia-smi
 cd attention-interpolation-diffusion
 source ~/.bashrc

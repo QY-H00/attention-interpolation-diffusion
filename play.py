@@ -3,7 +3,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import torch
 import lpips
-from utils import compute_smoothness_and_efficiency, compute_lpips
+from utils import compute_smoothness_and_consistency, compute_lpips
 
 from diffusion import InterpolationStableDiffusionPipeline
 from utils import show_images_horizontally, baysian_prior_selection
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=guide_prompt, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
     images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=guide_prompt, size=7, 
                                        num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late, alpha=alpha, beta=beta)
-    smoothness, efficiency, max_distance = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
+    smoothness, efficiency, max_distance = compute_smoothness_and_consistency(images, lpips_model, device="cuda")
     print(f"{file_suffix}", smoothness, efficiency, max_distance)
     if guide_prompt is not None:
         guide_prompt = guide_prompt[:20]

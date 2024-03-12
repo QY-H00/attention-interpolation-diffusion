@@ -1,103 +1,57 @@
-from typing import Union
-from types import MethodType
+from typing import Optional
 from tqdm.auto import tqdm
 import numpy as np
 import torch
-from torch import FloatTensor
-from diffusers import StableDiffusionPipeline, DDIMScheduler, AutoencoderKL, UNet2DConditionModel
+from diffusers import DDIMScheduler, AutoencoderKL, UNet2DConditionModel, UniPCMultistepScheduler, SchedulerMixin
 from diffusers.models.attention_processor import AttnProcessor
 from transformers import CLIPTextModel, CLIPTokenizer
-from interpolation import slerp, linear_interpolation, sphere_interpolation, InterpolationAttnProcessorWithUncond, InterpolationAttnProcessor, InterpolationAttnProcessorQuery, InterpolationAttnProcessorKeyValue, generate_beta_tensor
-
-
-class InterpolationDiffusionGeneral:
-    '''
-    Diffusion that generates interpolated images
-    '''
-    def __init__(self, repo_name: str="CompVis/stable-diffusion-v1-4", torch_device: str="cuda"):
-        self.pipeline = StableDiffusionPipeline.from_pretrained(repo_name, cache_dir="cache")
-        self.pipeline.to(torch_device)
-        ddim_scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler")
-        ddim_scheduler.set_timesteps = MethodType(ddim_set_timesteps, ddim_scheduler)
-        self.pipeline.scheduler = ddim_scheduler
-        self.torch_device = torch_device
-    
-    def interpolate(self, latent1: FloatTensor, latent2: FloatTensor, prompt1: str, prompt2: str, guide_prompt=None, size=3, boost_ratio=0.3, num_inference_steps=25):
-        '''
-        Interpolate between two generation
-        
-        Args:
-        latent1: FloatTensor, latent vector of the first image
-        latent2: FloatTensor, latent vector of the second image
-        prompt1: str, text prompt of the first image
-        prompt2: str, text prompt of the second image
-        guide_prompt: str, text prompt for the interpolation
-        size: int, number of interpolations including starting and ending points
-        
-        Returns:
-        List of nterpolated images
-        '''
-        assert latent1.shape == latent2.shape, "shapes of latent1 and latent2 must match"
-        
-        # Prepare interpolated inputs
-        self.pipeline.scheduler.set_timesteps(num_inference_steps)
-        latents = sphere_interpolation(latent1, latent2, size)
-        guidance_scale = 7.5
-        do_classifier_free_guidance = guidance_scale > 1 and self.pipeline.unet.config.time_cond_proj_dim is None
-        emb1, _ = self.pipeline.encode_prompt(prompt1, device=self.torch_device, num_images_per_prompt=1, negative_prompt=None, do_classifier_free_guidance=do_classifier_free_guidance)
-        emb2, _ = self.pipeline.encode_prompt(prompt2, device=self.torch_device, num_images_per_prompt=1, negative_prompt=None, do_classifier_free_guidance=do_classifier_free_guidance)
-        if guide_prompt is not None:
-            guide_emb, _ = self.pipeline.encode_prompt(guide_prompt, device=self.torch_device, num_images_per_prompt=1, negative_prompt=None, do_classifier_free_guidance=do_classifier_free_guidance)
-            embs_first_half = linear_interpolation(emb1, guide_emb, size // 2)
-            embs_second_half = linear_interpolation(guide_emb, emb2, size - size // 2)
-            embs = torch.cat([embs_first_half, embs_second_half], dim=0)
-        else:
-            embs = linear_interpolation(emb1, emb2, size)
-        
-        # Two-stage interpolation
-        num_initialize_step = int(boost_ratio * num_inference_steps)
-        num_refine_step = num_inference_steps - num_initialize_step
-        initialize_time_step = self.pipeline.scheduler.timesteps[:num_initialize_step]
-        refine_time_step = self.pipeline.scheduler.timesteps[num_initialize_step:]
-        
-        # Stage 1: Spatial intialization
-        spatial_interpolate_attn_proc = InterpolationAttnProcessorWithUncond(size=size, is_fused=False, alpha=num_initialize_step, beta=num_initialize_step)
-        self.pipeline.unet.set_attn_processor(processor=spatial_interpolate_attn_proc)
-        print("Spatial Initialize...")
-        latents = self.pipeline(latents=latents, prompt_embeds=embs, guidance_scale=guidance_scale, output_type="latent", timesteps=initialize_time_step, return_dict=False)[0]
-        
-        # Stage 2: Semantic refinement
-        refine_interpolate_attn_proc = InterpolationAttnProcessorWithUncond(size=size, is_fused=True, alpha=num_refine_step, beta=num_refine_step)
-        self.pipeline.unet.set_attn_processor(processor=refine_interpolate_attn_proc)
-        print("Semantic Refine...")
-        latents = self.pipeline(latents=latents, prompt_embeds=embs, guidance_scale=guidance_scale, output_type="latent", timesteps=refine_time_step, return_dict=False)[0]
-        
-        # Get the list of PIL images
-        print("Decode...")
-        images = self.pipeline(latents=latents, prompt_embeds=embs, num_inference_steps=0).images
-        
-        return images
+from interpolation import slerp, linear_interpolation, spherical_interpolation, OuterInterpolatedAttnProcessor, InnerInterpolatedAttnProcessor, generate_beta_tensor
 
 
 class InterpolationStableDiffusionPipeline:
     '''
     Diffusion Pipeline that generates interpolated images
     '''
-    def __init__(self, repo_name="CompVis/stable-diffusion-v1-4", device="cuda", frozen=True):
-        self.vae = AutoencoderKL.from_pretrained(repo_name, subfolder="vae", use_safetensors=True, cache_dir="weights")
-        self.tokenizer = CLIPTokenizer.from_pretrained(repo_name, subfolder="tokenizer", cache_dir="weights")
+    def __init__(
+        self,
+        repo_name: str = "CompVis/stable-diffusion-v1-4",
+        scheduler_name: str = "ddim",
+        device: str = "cuda",
+        frozen: bool = True,
+        guidance_scale: float = 7.5,
+        scheduler: Optional[SchedulerMixin] = None,
+        ):
+        
+        # Initialize the generator
+        self.vae = AutoencoderKL.from_pretrained(
+            repo_name, subfolder="vae", use_safetensors=True, cache_dir="weights"
+        )
+        self.tokenizer = CLIPTokenizer.from_pretrained(
+            repo_name, subfolder="tokenizer", cache_dir="weights"
+        )
         self.text_encoder = CLIPTextModel.from_pretrained(
             repo_name, subfolder="text_encoder", use_safetensors=True, cache_dir="weights"
         )
         self.unet = UNet2DConditionModel.from_pretrained(
             repo_name, subfolder="unet", use_safetensors=True, cache_dir="weights"
         )
-        self.scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler", cache_dir="weights")
+        
+        # Initialize the scheduler
+        if scheduler is not None:
+            self.scheduler = scheduler
+        elif scheduler_name == "ddim":
+            self.scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler", cache_dir="weights")
+        elif scheduler_name == "unipc":
+            self.scheduler = UniPCMultistepScheduler.from_pretrained(repo_name, subfolder="scheduler", cache_dir="weights")
+        else:
+            raise ValueError("Invalid scheduler name (ddim, unipc) and not specify scheduler.")
+        
+        # Setup device
         self.torch_device = device
         self.vae.to(self.torch_device)
         self.text_encoder.to(self.torch_device)
         self.unet.to(self.torch_device)
-        self.guidance_scale = 7.5  # Scale for classifier-free guidance
+        self.guidance_scale = guidance_scale  # Scale for classifier-free guidance
         
         if frozen:
             for param in self.unet.parameters():
@@ -109,10 +63,18 @@ class InterpolationStableDiffusionPipeline:
             for param in self.vae.parameters():
                 param.requires_grad = False
 
-    def prompt_to_embedding(self, prompt):
+    def prompt_to_embedding(self, prompt: str, negative_prompt: str = "") -> torch.FloatTensor:
         '''
         Prepare the text prompt for the diffusion process
+        
+        Args:
+            prompt: str, text prompt
+            negative_prompt: str, negative text prompt
+            
+        Returns:
+            FloatTensor, text embeddings
         '''
+        
         text_input = self.tokenizer(
             prompt, padding="max_length", max_length=self.tokenizer.model_max_length, truncation=True, return_tensors="pt"
         )
@@ -121,74 +83,102 @@ class InterpolationStableDiffusionPipeline:
             text_embeddings = self.text_encoder(text_input.input_ids.to(self.torch_device))[0]
 
         max_length = text_input.input_ids.shape[-1]
-        uncond_input = self.tokenizer([""] * 1, padding="max_length", max_length=max_length, return_tensors="pt")
+        uncond_input = self.tokenizer([negative_prompt] * 1, padding="max_length", max_length=max_length, return_tensors="pt")
         uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.torch_device))[0]
 
         text_embeddings = torch.cat([text_embeddings, uncond_embeddings])
         return text_embeddings
 
-    def interpolate(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="fused"):
+    def interpolate(
+        self, 
+        latent_start: torch.FloatTensor,
+        latent_end: torch.FloatTensor,
+        prompt_start: str,
+        prompt_end: str,
+        guide_prompt: str = None,
+        negative_prompt: str = "",
+        size: int = 7,
+        num_inference_steps: int = 25,
+        warmup_ratio: float = 0.5,
+        early: str = "fused_outer",
+        late: str = "self"
+        ) -> np.ndarray:
         '''
         Interpolate between two generation
         
         Args:
-        latent1: FloatTensor, latent vector of the first image
-        latent2: FloatTensor, latent vector of the second image
-        prompt1: str, text prompt of the first image
-        prompt2: str, text prompt of the second image
+        latent_start: FloatTensor, latent vector of the first image
+        latent_end: FloatTensor, latent vector of the second image
+        prompt_start: str, text prompt of the first image
+        prompt_end: str, text prompt of the second image
         guide_prompt: str, text prompt for the interpolation
+        negative_prompt: str, negative text prompt
         size: int, number of interpolations including starting and ending points
+        num_inference_steps: int, number of inference steps in scheduler
+        warmup_ratio: float, ratio of warmup steps
+        early: str, warmup interpolation methods
+        late: str, late interpolation methods
         
         Returns:
-        List of nterpolated images
+        Numpy array of nterpolated images, shape (size, H, W, 3)
         '''
-        # Prepare interpolated inputs
-        latents = sphere_interpolation(latent1, latent2, size)
+        # Specify alpha and beta
+        if alpha is None:
+            alpha = num_inference_steps
+        if beta is None:
+            beta = num_inference_steps
+        
         self.scheduler.set_timesteps(num_inference_steps)
-        embs1 = self.prompt_to_embedding(prompt1)
-        emb1 = embs1[0:1]
-        uncond_emb1 = embs1[1:2]
-        embs2 = self.prompt_to_embedding(prompt2)
-        emb2 = embs2[0:1]
-        uncond_emb2 = embs2[1:2]
+        
+        # Prepare interpolated latents and embeddings
+        latents = spherical_interpolation(latent_start, latent_end, size)
+        embs_start = self.prompt_to_embedding(prompt_start, negative_prompt)
+        emb_start = embs_start[0:1]
+        uncond_emb_start = embs_start[1:2]
+        embs_end = self.prompt_to_embedding(prompt_end, negative_prompt)
+        emb_end = embs_end[0:1]
+        uncond_emb_end = embs_end[1:2]
+        
+        # Perform prompt guidance if it is specified
         if guide_prompt is not None:
-            guide_embs = self.prompt_to_embedding(guide_prompt)
+            guide_embs = self.prompt_to_embedding(guide_prompt, negative_prompt)
             guide_emb = guide_embs[0:1]
             uncond_guide_emb = guide_embs[1:2]
-            embs_first_half = linear_interpolation(emb1, guide_emb, size // 2)
-            embs_second_half = linear_interpolation(guide_emb, emb2, size - size // 2)
-            embs = torch.cat([embs_first_half, embs_second_half], dim=0)
-            uncond_embs_first_half = linear_interpolation(uncond_emb1, uncond_guide_emb, size // 2)
-            uncond_embs_second_half = linear_interpolation(uncond_guide_emb, uncond_emb2, size - size // 2)
-            uncond_embs = torch.cat([uncond_embs_first_half, uncond_embs_second_half], dim=0)
+            embs = torch.cat([emb_start] + [guide_emb] * (size - 2) + [emb_end], dim=0)
+            uncond_embs = torch.cat([uncond_emb_start] + [uncond_guide_emb] * (size - 2) + [uncond_emb_end], dim=0)
         else:
-            embs = linear_interpolation(emb1, emb2, size)
-            uncond_embs = linear_interpolation(uncond_emb1, uncond_emb2, size)
+            embs = linear_interpolation(emb_start, emb_end, size)
+            uncond_embs = linear_interpolation(uncond_emb_start, uncond_emb_end, size)
 
+        # Specify the interpolation methods
+        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(size=size, is_fused=False, alpha=alpha, beta=beta)
+        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(size=size, is_fused=True, alpha=alpha, beta=beta)
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(size=size, is_fused=False, alpha=alpha, beta=beta)
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(size=size, is_fused=True, alpha=alpha, beta=beta)
+        self_attn_proc = AttnProcessor()
+        procs_dict = {
+            'pure_inner': pure_inner_attn_proc,
+            'fused_inner': fused_inner_attn_proc,
+            'pure_outer': pure_outer_attn_proc,
+            'fused_outer': fused_outer_attn_proc,
+            'self': self_attn_proc
+        }
+        
+        # Denoising process
         i = 0
-        boost_step = int(num_inference_steps * boost_ratio)
+        warmup_step = int(num_inference_steps * warmup_ratio)
         for t in tqdm(self.scheduler.timesteps):
             i += 1
-            # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             latent_model_input = self.scheduler.scale_model_input(latents, timestep=t)
-            # predict the noise residual
             with torch.no_grad():
-                if i < boost_step:
-                    if early == "cross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=False, alpha=num_inference_steps, beta=num_inference_steps)
-                    elif early == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(size=size, is_fused=True, alpha=num_inference_steps, beta=num_inference_steps)
-                    else:
-                        interpolate_attn_proc = AttnProcessor()
+                # Change attention module
+                if i < warmup_step:
+                    interpolate_attn_proc = procs_dict[early]
                 else:
-                    if late == "self":
-                        interpolate_attn_proc = AttnProcessor()
-                    elif late == "fused":
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(size=size, is_fused=True, alpha=num_inference_steps, beta=num_inference_steps)
-                    else:
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(size=size, is_fused=False, alpha=num_inference_steps, beta=num_inference_steps)
-                    
+                    interpolate_attn_proc = procs_dict[late]
                 self.unet.set_attn_processor(processor=interpolate_attn_proc)
+                
+                # Predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
                 attn_proc = AttnProcessor()
                 self.unet.set_attn_processor(processor=attn_proc)
@@ -197,6 +187,8 @@ class InterpolationStableDiffusionPipeline:
             noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+        
+        # Decode the images
         latents = 1 / 0.18215 * latents
         with torch.no_grad():
             image = self.vae.decode(latents).sample
@@ -205,31 +197,79 @@ class InterpolationStableDiffusionPipeline:
         return images
     
     
-    def interpolate_save_gpu(self, latent1, latent2, prompt1, prompt2, guide_prompt=None, size=10, num_inference_steps=25, boost_ratio=0.5, early="cross", late="fused", alpha=None, beta=None):
+    def interpolate_save_gpu(
+        self,
+        latent_start: torch.FloatTensor,
+        latent_end: torch.FloatTensor,
+        prompt_start: str,
+        prompt_end: str,
+        guide_prompt: str = None,
+        negative_prompt: str = "",
+        size: int = 7,
+        num_inference_steps: int = 25,
+        warmup_ratio: float = 0.5,
+        early: str = "fused_outer",
+        late: str = "self",
+        alpha: float = None,
+        beta: float = None,
+        init: str = "linear"
+        ) -> np.ndarray:
         '''
         Interpolate between two generation
         
         Args:
-        latent1: FloatTensor, latent vector of the first image
-        latent2: FloatTensor, latent vector of the second image
-        prompt1: str, text prompt of the first image
-        prompt2: str, text prompt of the second image
+        latent_start: FloatTensor, latent vector of the first image
+        latent_end: FloatTensor, latent vector of the second image
+        prompt_start: str, text prompt of the first image
+        prompt_end: str, text prompt of the second image
         guide_prompt: str, text prompt for the interpolation
+        negative_prompt: str, negative text prompt
         size: int, number of interpolations including starting and ending points
+        num_inference_steps: int, number of inference steps in scheduler
+        warmup_ratio: float, ratio of warmup steps
+        early: str, warmup interpolation methods
+        late: str, late interpolation methods
+        alpha: float, alpha parameter for beta distribution
+        beta: float, beta parameter for beta distribution
+        init: str, interpolation initialization methods
         
         Returns:
-        List of nterpolated images
+        Numpy array of nterpolated images, shape (size, H, W, 3)
         '''
-        # Prepare interpolated inputs
+        # Specify alpha and beta
         if alpha is None:
             alpha = num_inference_steps
         if beta is None:
             beta = num_inference_steps
         betas = generate_beta_tensor(size, alpha=alpha, beta=beta)
         final_images = None
+        
+        # Generate interpoloated images one by one
         for i in range(size-2):
             it = betas[i+1].item()
-            images = self.interpolate_single(it, latent1, latent2, prompt1, prompt2, guide_prompt, num_inference_steps, boost_ratio, early=early, late=late)
+            if init == "denoising":
+                images = self.denoising_interpolate(
+                    latent_start,
+                    prompt_start,
+                    prompt_end,
+                    negative_prompt,
+                    interpolated_ratio=it,
+                    timesteps=num_inference_steps)
+            else:
+                images = self.interpolate_single(
+                    it,
+                    latent_start,
+                    latent_end,
+                    prompt_start,
+                    prompt_end,
+                    guide_prompt=guide_prompt,
+                    num_inference_steps=num_inference_steps,
+                    warmup_ratio=warmup_ratio,
+                    early=early,
+                    late=late,
+                    negative_prompt=negative_prompt,
+                    init=init
+                )
             if size == 3:
                 return images
             if i == 0:
@@ -241,83 +281,157 @@ class InterpolationStableDiffusionPipeline:
         return final_images
 
 
-    def interpolate_single(self, it, latent1, latent2, prompt1, prompt2, guide_prompt=None, num_inference_steps=25, boost_ratio=0.5, early="cross", late="self"):
+    def interpolate_single(
+        self,
+        it,
+        latent_start: torch.FloatTensor,
+        latent_end: torch.FloatTensor,
+        prompt_start: str,
+        prompt_end: str,
+        guide_prompt: str = None,
+        negative_prompt: str = "",
+        num_inference_steps: int = 25,
+        warmup_ratio: float = 0.5,
+        early: str = "fused_outer",
+        late: str = "self",
+        init="linear"
+        ) -> np.ndarray:
         '''
-        Interpolate between two generation
-        
+        Interpolates between two latent vectors and generates a sequence of images.
+
         Args:
-        latent1: FloatTensor, latent vector of the first image
-        latent2: FloatTensor, latent vector of the second image
-        prompt1: str, text prompt of the first image
-        prompt2: str, text prompt of the second image
-        guide_prompt: str, text prompt for the interpolation
-        size: int, number of interpolations including starting and ending points
-        
+            it (float): Interpolation factor between latent_start and latent_end.
+            latent_start (torch.FloatTensor): Starting latent vector.
+            latent_end (torch.FloatTensor): Ending latent vector.
+            prompt_start (str): Starting prompt for text conditioning.
+            prompt_end (str): Ending prompt for text conditioning.
+            guide_prompt (str, optional): Guiding prompt for text conditioning. Defaults to None.
+            negative_prompt (str, optional): Negative prompt for text conditioning. Defaults to "".
+            num_inference_steps (int, optional): Number of inference steps. Defaults to 25.
+            warmup_ratio (float, optional): Ratio of warm-up steps. Defaults to 0.5.
+            early (str, optional): Early attention processing method. Defaults to "fused_outer".
+            late (str, optional): Late attention processing method. Defaults to "self".
+            init (str, optional): Initialization method for interpolation. Defaults to "linear".
+
         Returns:
-        List of nterpolated images
+            numpy.ndarray: Sequence of generated images.
         '''
         # Prepare interpolated inputs
         self.scheduler.set_timesteps(num_inference_steps)
         
-        embs1 = self.prompt_to_embedding(prompt1)
-        emb1 = embs1[0:1]
-        uncond_emb1 = embs1[1:2]
-        embs2 = self.prompt_to_embedding(prompt2)
-        emb2 = embs2[0:1]
-        uncond_emb2 = embs2[1:2]
+        embs_start = self.prompt_to_embedding(prompt_start, negative_prompt)
+        emb_start = embs_start[0:1]
+        uncond_emb_start = embs_start[1:2]
+        embs_end = self.prompt_to_embedding(prompt_end, negative_prompt)
+        emb_end = embs_end[0:1]
+        uncond_emb_end = embs_end[1:2]
 
-        latent_t = slerp(latent1, latent2, it)
+        latent_t = slerp(latent_start, latent_end, it)
         if guide_prompt is not None:
-            embs_guide = self.prompt_to_embedding(guide_prompt)
+            embs_guide = self.prompt_to_embedding(guide_prompt, negative_prompt)
             emb_t = embs_guide[0:1]
         else:
-            emb_t = torch.lerp(emb1, emb2, it)
-        uncond_emb_t = torch.lerp(uncond_emb1, uncond_emb2, it)
+            if init == "linear":
+                emb_t = torch.lerp(emb_start, emb_end, it)
+            else:
+                emb_t = slerp(emb_start, emb_end, it)
+        if init == "linear":
+            uncond_emb_t = torch.lerp(uncond_emb_start, uncond_emb_end, it)
+        else:
+            uncond_emb_t = slerp(uncond_emb_start, uncond_emb_end, it)
         
-        latents = torch.cat([latent1, latent_t, latent2], dim=0)
-        embs = torch.cat([emb1, emb_t, emb2], dim=0)
-        uncond_embs = torch.cat([uncond_emb1, uncond_emb_t, uncond_emb2], dim=0)
+        latents = torch.cat([latent_start, latent_t, latent_end], dim=0)
+        embs = torch.cat([emb_start, emb_t, emb_end], dim=0)
+        uncond_embs = torch.cat([uncond_emb_start, uncond_emb_t, uncond_emb_end], dim=0)
 
+        # Specifiy the attention processors
+        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False)
+        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True)
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
+        self_attn_proc = AttnProcessor()
+        procs_dict = {
+            'pure_inner': pure_inner_attn_proc,
+            'fused_inner': fused_inner_attn_proc,
+            'pure_outer': pure_outer_attn_proc,
+            'fused_outer': fused_outer_attn_proc,
+            'self': self_attn_proc
+        }
+        
         i = 0
-        boost_step = int(num_inference_steps * boost_ratio)
+        warmup_step = int(num_inference_steps * warmup_ratio)
+        for t in tqdm(self.scheduler.timesteps):
+            i += 1
+            latent_model_input = self.scheduler.scale_model_input(latents, timestep=t)
+            # predict the noise residual
+            with torch.no_grad():
+                # Warmup
+                if i < warmup_step:
+                    interpolate_attn_proc = procs_dict[early]
+                else:
+                    interpolate_attn_proc = procs_dict[late]
+                self.unet.set_attn_processor(processor=interpolate_attn_proc)
+                # predict the noise residual
+                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+                attn_proc = AttnProcessor()
+                self.unet.set_attn_processor(processor=attn_proc)
+                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+            # perform guidance
+            noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+        
+        # Decode the images
+        latents = 1 / 0.18215 * latents
+        with torch.no_grad():
+            image = self.vae.decode(latents).sample
+        images = (image / 2 + 0.5).clamp(0, 1)
+        images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
+        return images
+    
+    def denoising_interpolate(
+        self,
+        latents: torch.FloatTensor,
+        text_1: str,
+        text_2: str,
+        negative_prompt: str = "",
+        interpolated_ratio: float = 1,
+        timesteps: int = 25
+        ) -> np.ndarray:
+        """
+        Performs denoising interpolation on the given latents.
+
+        Args:
+            latents (torch.Tensor): The input latents.
+            text_1 (str): The first text prompt.
+            text_2 (str): The second text prompt.
+            negative_prompt (str, optional): The negative text prompt. Defaults to "".
+            interpolated_ratio (int, optional): The ratio of interpolation between text_1 and text_2. Defaults to 1.
+            timesteps (int, optional): The number of timesteps for diffusion. Defaults to 25.
+
+        Returns:
+            numpy.ndarray: The interpolated images.
+        """
+        self.unet.set_attn_processor(processor=AttnProcessor())
+        start_emb = self.prompt_to_embedding(text_1)
+        end_emb = self.prompt_to_embedding(text_2)
+        neg_emb = self.prompt_to_embedding(negative_prompt)
+        uncond_emb = neg_emb[0:1]
+        emb_1 = start_emb[0:1]
+        emb_2 = end_emb[0:1]
+        self.scheduler.set_timesteps(timesteps)
+        i = 0
         for t in tqdm(self.scheduler.timesteps):
             i += 1
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             latent_model_input = self.scheduler.scale_model_input(latents, timestep=t)
             # predict the noise residual
             with torch.no_grad():
-                if i < boost_step:
-                    if early == "vcross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=1, beta=1)
-                    elif early == "vfused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=1, beta=1)
-                    elif early == "scross":
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=False, alpha=1, beta=1)
-                    elif early == "sfused":
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=True, alpha=1, beta=1)
-                    elif early == "self":
-                        interpolate_attn_proc = AttnProcessor()
-                    else:
-                        raise ValueError("Invalid early parameter")
+                if i < timesteps * interpolated_ratio:
+                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=emb_1).sample
                 else:
-                    if late == "vcross":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=False, alpha=1, beta=1)
-                    elif late == "vfused":
-                        interpolate_attn_proc = InterpolationAttnProcessor(t=it, is_fused=True, alpha=1, beta=1)
-                    elif late == "scross":
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=False, alpha=1, beta=1)
-                    elif late == "sfused":
-                        interpolate_attn_proc = InterpolationAttnProcessorKeyValue(t=it, is_fused=True, alpha=1, beta=1)
-                    elif late == "self":
-                        interpolate_attn_proc = AttnProcessor()
-                    else:
-                        raise ValueError("Invalid early parameter")
-                    
-                self.unet.set_attn_processor(processor=interpolate_attn_proc)
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
-                attn_proc = AttnProcessor()
-                self.unet.set_attn_processor(processor=attn_proc)
-                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=emb_2).sample
+                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_emb).sample
             # perform guidance
             noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
@@ -328,56 +442,4 @@ class InterpolationStableDiffusionPipeline:
         images = (image / 2 + 0.5).clamp(0, 1)
         images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
         return images
-
-
-def ddim_set_timesteps(self, num_inference_steps: int=None, timesteps=None, device: Union[str, torch.device] = None):
-        """
-        Modify DDIM Scheduler to make it aceepts custom timesteps
-
-        Args:
-            num_inference_steps (`int`):
-                The number of diffusion steps used when generating samples with a pre-trained model.
-        """
-        
-        if num_inference_steps == 0:
-            self.timesteps = torch.tensor([], device=device, dtype=torch.int64)
-        elif timesteps is not None:
-            self.timesteps = timesteps  
-        else:
-            if num_inference_steps > self.config.num_train_timesteps:
-                raise ValueError(
-                    f"`num_inference_steps`: {num_inference_steps} cannot be larger than `self.config.train_timesteps`:"
-                    f" {self.config.num_train_timesteps} as the unet model trained with this scheduler can only handle"
-                    f" maximal {self.config.num_train_timesteps} timesteps."
-                )
-
-            self.num_inference_steps = num_inference_steps
-
-            # "linspace", "leading", "trailing" corresponds to annotation of Table 2. of https://arxiv.org/abs/2305.08891
-            if self.config.timestep_spacing == "linspace":
-                timesteps = (
-                    np.linspace(0, self.config.num_train_timesteps - 1, num_inference_steps)
-                    .round()[::-1]
-                    .copy()
-                    .astype(np.int64)
-                )
-            elif self.config.timestep_spacing == "leading":
-                step_ratio = self.config.num_train_timesteps // self.num_inference_steps
-                # creates integer timesteps by multiplying by ratio
-                # casting to int to avoid issues when num_inference_step is power of 3
-                timesteps = (np.arange(0, num_inference_steps) * step_ratio).round()[::-1].copy().astype(np.int64)
-                timesteps += self.config.steps_offset
-            elif self.config.timestep_spacing == "trailing":
-                step_ratio = self.config.num_train_timesteps / self.num_inference_steps
-                # creates integer timesteps by multiplying by ratio
-                # casting to int to avoid issues when num_inference_step is power of 3
-                timesteps = np.round(np.arange(self.config.num_train_timesteps, 0, -step_ratio)).astype(np.int64)
-                timesteps -= 1
-            else:
-                raise ValueError(
-                    f"{self.config.timestep_spacing} is not supported. Please make sure to choose one of 'leading' or 'trailing'."
-                )
-
-            self.timesteps = torch.from_numpy(timesteps).to(device)
-        
-        
+ 

@@ -1,0 +1,139 @@
+Wed Mar  6 15:21:58 2024       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 545.23.08              Driver Version: 545.23.08    CUDA Version: 12.3     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA RTX A5000               On  | 00000000:1E:00.0 Off |                    0 |
+| 30%   43C    P8              21W / 230W |      2MiB / 23028MiB |      0%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+Setting up [LPIPS] perceptual loss: trunk [vgg], v[0.1], spatial [off]
+Loading model from: /home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/lpips/weights/v0.1/vgg.pth
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise
+Setting up [LPIPS] perceptual loss: trunk [vgg], v[0.1], spatial [off]
+Loading model from: /home/qiyuan/.conda/envs/AID/lib/python3.10/site-packages/lpips/weights/v0.1/vgg.pth
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a ship}_{a bird}/1
+Smoothness: 0.8838, Mean Inception Distance: 0.1436, Max Inception Distance: 0.1818
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{a cat}/1
+Smoothness: 0.8327, Mean Inception Distance: 0.1333, Max Inception Distance: 0.1828
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a frog}/1
+Smoothness: 0.8931, Mean Inception Distance: 0.1217, Max Inception Distance: 0.1490
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{a bird}/1
+Smoothness: 0.9029, Mean Inception Distance: 0.1472, Max Inception Distance: 0.1726
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a bird}_{a cat}/1
+Smoothness: 0.8943, Mean Inception Distance: 0.1238, Max Inception Distance: 0.1474
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a bird}/1
+Smoothness: 0.7676, Mean Inception Distance: 0.1528, Max Inception Distance: 0.2223
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{an automobile}/1
+Smoothness: 0.8940, Mean Inception Distance: 0.1355, Max Inception Distance: 0.1665
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a cat}_{a truck}/1
+Smoothness: 0.9087, Mean Inception Distance: 0.1365, Max Inception Distance: 0.1621
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a cat}/1
+Smoothness: 0.9185, Mean Inception Distance: 0.1571, Max Inception Distance: 0.1886
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an airplane}_{a ship}/1
+Smoothness: 0.9096, Mean Inception Distance: 0.1232, Max Inception Distance: 0.1475
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an airplane}_{a deer}/1
+Smoothness: 0.8912, Mean Inception Distance: 0.1843, Max Inception Distance: 0.2295
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a ship}/1
+Smoothness: 0.9263, Mean Inception Distance: 0.1052, Max Inception Distance: 0.1196
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{a deer}/1
+Smoothness: 0.8575, Mean Inception Distance: 0.1324, Max Inception Distance: 0.1784
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a bird}_{a truck}/1
+Smoothness: 0.8101, Mean Inception Distance: 0.1460, Max Inception Distance: 0.2027
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{an automobile}/1
+Smoothness: 0.9285, Mean Inception Distance: 0.1555, Max Inception Distance: 0.1800
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a dog}/1
+Smoothness: 0.9151, Mean Inception Distance: 0.1229, Max Inception Distance: 0.1439
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{an automobile}/1
+Smoothness: 0.9281, Mean Inception Distance: 0.0770, Max Inception Distance: 0.0891
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a deer}/1
+Smoothness: 0.9322, Mean Inception Distance: 0.1249, Max Inception Distance: 0.1462
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a deer}/1
+Smoothness: 0.8735, Mean Inception Distance: 0.1269, Max Inception Distance: 0.1645
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a ship}_{a dog}/1
+Smoothness: 0.9413, Mean Inception Distance: 0.1652, Max Inception Distance: 0.1838
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a deer}_{a dog}/1
+Smoothness: 0.9404, Mean Inception Distance: 0.1028, Max Inception Distance: 0.1157
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a truck}/1
+Smoothness: 0.9217, Mean Inception Distance: 0.1063, Max Inception Distance: 0.1216
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a dog}_{a bird}/1
+Smoothness: 0.8974, Mean Inception Distance: 0.1056, Max Inception Distance: 0.1374
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an airplane}_{an automobile}/1
+Smoothness: 0.9315, Mean Inception Distance: 0.1343, Max Inception Distance: 0.1524
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an airplane}_{a horse}/1
+Smoothness: 0.9377, Mean Inception Distance: 0.1555, Max Inception Distance: 0.1716
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a bird}_{a ship}/1
+Smoothness: 0.9556, Mean Inception Distance: 0.1569, Max Inception Distance: 0.1703
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a cat}_{a horse}/1
+Smoothness: 0.9160, Mean Inception Distance: 0.1391, Max Inception Distance: 0.1764
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a ship}_{a cat}/1
+Smoothness: 0.9099, Mean Inception Distance: 0.1373, Max Inception Distance: 0.1655
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a cat}_{a bird}/1
+Smoothness: 0.8921, Mean Inception Distance: 0.1508, Max Inception Distance: 0.1844
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a dog}_{a cat}/1
+Smoothness: 0.9423, Mean Inception Distance: 0.1552, Max Inception Distance: 0.1745
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a cat}_{an automobile}/1
+Smoothness: 0.8692, Mean Inception Distance: 0.1288, Max Inception Distance: 0.1636
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a cat}/1
+Smoothness: 0.8775, Mean Inception Distance: 0.1216, Max Inception Distance: 0.1604
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a deer}_{an airplane}/1
+Smoothness: 0.9111, Mean Inception Distance: 0.1553, Max Inception Distance: 0.1846
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a cat}_{an airplane}/1
+Smoothness: 0.8747, Mean Inception Distance: 0.1599, Max Inception Distance: 0.1956
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a ship}/1
+Smoothness: 0.9123, Mean Inception Distance: 0.1193, Max Inception Distance: 0.1431
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a truck}/1
+Smoothness: 0.8729, Mean Inception Distance: 0.1274, Max Inception Distance: 0.1622
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a dog}_{a ship}/1
+Smoothness: 0.9314, Mean Inception Distance: 0.1245, Max Inception Distance: 0.1452
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a deer}_{a ship}/1
+Smoothness: 0.8966, Mean Inception Distance: 0.1566, Max Inception Distance: 0.1940
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{a frog}/1
+Smoothness: 0.9458, Mean Inception Distance: 0.1790, Max Inception Distance: 0.2006
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a deer}_{a bird}/1
+Smoothness: 0.9384, Mean Inception Distance: 0.1647, Max Inception Distance: 0.1937
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{a ship}/1
+Smoothness: 0.9026, Mean Inception Distance: 0.1745, Max Inception Distance: 0.2079
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a bird}/1
+Smoothness: 0.8431, Mean Inception Distance: 0.1628, Max Inception Distance: 0.2391
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a ship}_{a horse}/1
+Smoothness: 0.9101, Mean Inception Distance: 0.1466, Max Inception Distance: 0.1713
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a bird}_{an airplane}/1
+Smoothness: 0.8551, Mean Inception Distance: 0.1704, Max Inception Distance: 0.2180
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a dog}_{an automobile}/1
+Smoothness: 0.8872, Mean Inception Distance: 0.1187, Max Inception Distance: 0.1503
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a ship}_{an airplane}/1
+Smoothness: 0.9220, Mean Inception Distance: 0.1202, Max Inception Distance: 0.1425
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a deer}_{an automobile}/1
+Smoothness: 0.8848, Mean Inception Distance: 0.1436, Max Inception Distance: 0.1810
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an airplane}_{a truck}/1
+Smoothness: 0.8856, Mean Inception Distance: 0.1499, Max Inception Distance: 0.1863
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{a ship}/1
+Smoothness: 0.8672, Mean Inception Distance: 0.1272, Max Inception Distance: 0.1680
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{a horse}/1
+Smoothness: 0.9351, Mean Inception Distance: 0.1659, Max Inception Distance: 0.1952
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{an airplane}/1
+Smoothness: 0.9506, Mean Inception Distance: 0.1560, Max Inception Distance: 0.1725
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a frog}_{a dog}/1
+Smoothness: 0.9351, Mean Inception Distance: 0.1228, Max Inception Distance: 0.1431
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{an automobile}_{a horse}/1
+Smoothness: 0.9085, Mean Inception Distance: 0.1327, Max Inception Distance: 0.1634
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a dog}_{a frog}/1
+Smoothness: 0.9188, Mean Inception Distance: 0.1240, Max Inception Distance: 0.1479
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a truck}_{a frog}/1
+Smoothness: 0.9369, Mean Inception Distance: 0.1273, Max Inception Distance: 0.1428
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{a truck}/1
+Smoothness: 0.8459, Mean Inception Distance: 0.1654, Max Inception Distance: 0.2170
+results/direct_eval/latent_no_beta_prior/cifar10/pairwise/{a horse}_{a dog}/1
+Smoothness: 0.8672, Mean Inception Distance: 0.1413, Max Inception Distance: 0.1756

@@ -1,40 +1,116 @@
 import os
-import matplotlib.pyplot as plt
-import numpy as np
 from PIL import Image
-from scipy.stats import wasserstein_distance
-from scipy.linalg import sqrtm
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
-import lpips
-from bayes_opt import BayesianOptimization, SequentialDomainReductionTransformer
-from torchvision.models import inception_v3
 from torchvision.transforms import Normalize
+from lpips import LPIPS
+from bayes_opt import BayesianOptimization, SequentialDomainReductionTransformer
+from diffusion import InterpolationStableDiffusionPipeline
 
 
-def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_model, guide_prompt=None, size=3, num_inference_steps=25, boost_ratio=1.0, early="vfused", late="self", threshold=0.9):
+def baysian_prior_selection(
+    interpolation_pipe: InterpolationStableDiffusionPipeline,
+    latent1: torch.FloatTensor,
+    latent2: torch.FloatTensor,
+    prompt1: str,
+    prompt2: str,
+    lpips_model: LPIPS,
+    guide_prompt: str | None = None,
+    negative_prompt: str = "",
+    size: int = 3,
+    num_inference_steps: int = 25,
+    warmup_ratio: float = 1,
+    early: str = "vfused",
+    late: str = "self",
+    target_score: float = 0.9,
+    n_iter: int = 15,
+    p_min: float | None = None,
+    p_max: float | None = None
+) -> tuple:
+    '''
+    Select the alpha and beta parameters for the interpolation using Bayesian optimization.
+    
+    Args:
+        interpolation_pipe (any): The interpolation pipeline.
+        latent1 (torch.FloatTensor): The first source latent vector.
+        latent2 (torch.FloatTensor): The second source latent vector.
+        prompt1 (str): The first source prompt.
+        prompt2 (str): The second source prompt.
+        lpips_model (any): The LPIPS model used to compute perceptual distances.
+        guide_prompt (str | None, optional): The guide prompt for the interpolation, if any. Defaults to None.
+        negative_prompt (str, optional): The negative prompt for the interpolation, default to empty string. Defaults to "".
+        size (int, optional): The size of the interpolation sequence. Defaults to 3.
+        num_inference_steps (int, optional): The number of inference steps. Defaults to 25.
+        warmup_ratio (float, optional): The warmup ratio. Defaults to 1.
+        early (str, optional): The early fusion method. Defaults to "vfused".
+        late (str, optional): The late fusion method. Defaults to "self".
+        target_score (float, optional): The target score. Defaults to 0.9.
+        n_iter (int, optional): The maximum number of iterations. Defaults to 15.
+        p_min (float, optional): The minimum value of alpha and beta. Defaults to None.
+        p_max (float, optional): The maximum value of alpha and beta. Defaults to None.
+    Returns:
+        tuple: A tuple containing the selected alpha and beta parameters.
+    '''
+
     def get_smoothness(alpha, beta):
+        '''
+        Black-box objective function of Baysian Optimization.
+        Get the smoothness of the interpolated sequence with the given alpha and beta.
+        '''
         if alpha < beta and large_alpha_prior:
             return 0
         if alpha > beta and not large_alpha_prior:
             return 0
         if alpha == beta:
             return init_smoothness
-        images = pipe.interpolate_save_gpu(latent1, latent2, prompt1, prompt2, guide_prompt=guide_prompt, 
-                                        size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late, alpha=alpha, beta=beta)
-        smoothness, _, _ = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
+        interpolation_sequence = interpolation_pipe.interpolate_save_gpu(
+            latent1,
+            latent2,
+            prompt1,
+            prompt2,
+            guide_prompt=guide_prompt,
+            negative_prompt=negative_prompt,                
+            size=size,
+            num_inference_steps=num_inference_steps,
+            warmup_ratio=warmup_ratio,
+            early=early,
+            late=late,
+            alpha=alpha,
+            beta=beta
+        )
+        smoothness, _, _ = compute_smoothness_and_consistency(interpolation_sequence, lpips_model)
         return smoothness
-    
-    # More prior on alpha and beta
-    images = pipe.interpolate_single(0.5, latent1, latent2, prompt1, prompt2, guide_prompt=guide_prompt, 
-                                        num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+   
+    # Add prior into selection of alpha and beta
+    # We firstly compute the interpolated images with t=0.5
+    images = interpolation_pipe.interpolate_single(
+        0.5,
+        latent1,
+        latent2,
+        prompt1,
+        prompt2,
+        guide_prompt=guide_prompt,
+        negative_prompt=negative_prompt,
+        num_inference_steps=num_inference_steps,
+        warmup_ratio=warmup_ratio,
+        early=early,
+        late=late
+    )
+    # We compute the perceptual distances of the interpolated images (t=0.5) to the source image
     distances = compute_lpips(images, lpips_model)
-    init_smoothness, _, _ = compute_smoothness_and_efficiency(images, lpips_model, device="cuda")
-    dis_A = distances[0]
-    dis_B = distances[1]
-    large_alpha_prior = dis_A < dis_B
+    # We compute the init_smoothness as the smoothness when alpha=beta to avoid recomputation
+    init_smoothness, _, _ = compute_smoothness_and_consistency(images, lpips_model)
+    # If perceptual distance to the first source image is smaller, alpha should be larger than beta
+    large_alpha_prior = distances[0] < distances[1]
 
-    # Bounded region of parameter space
-    pbounds = {'alpha': (20, 30), 'beta': (20, 30)}
+    # Baysian optimization configuration
+    num_warmup_steps = warmup_ratio * num_inference_steps
+    if p_min is None:
+        p_min = 1
+    if p_max is None:
+        p_max = num_warmup_steps
+    pbounds = {'alpha': (p_min, p_max), 'beta': (p_min, p_max)}
     bounds_transformer = SequentialDomainReductionTransformer(minimum_window=0.1)
     optimizer = BayesianOptimization(
         f=get_smoothness,
@@ -43,11 +119,9 @@ def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_mode
         bounds_transformer=bounds_transformer,
         allow_duplicate_points=True
     )
-    target_score = 0.95
-    n_iter = 15
-    alpha_init = [20, 25, 30]
-    beta_init = [20, 25, 30]
-    
+    alpha_init = [p_min, (p_min + p_max) / 2, p_max]
+    beta_init = [p_min, (p_min + p_max) / 2, p_max]
+  
     # Initial probing
     for alpha in alpha_init:
         for beta in beta_init:
@@ -56,26 +130,36 @@ def baysian_prior_selection(pipe, latent1, latent2, prompt1, prompt2, lpips_mode
             latest_score = latest_result['target']
             if latest_score >= target_score:
                 return alpha, beta
-            
+
+    # Start optimization
     for _ in range(n_iter):  # Max iterations
         optimizer.maximize(init_points=0, n_iter=1)  # One iteration at a time
         max_score = optimizer.max['target']  # Get the highest score so far
         if max_score >= target_score:
             print(f"Stopping early, target of {target_score} reached.")
             break  # Exit the loop if target is reached or exceeded
-    # optimizer.maximize(init_points=0, n_iter=15)
+   
     results = optimizer.max
     alpha = results['params']['alpha']
     beta = results['params']['beta']
     return alpha, beta
 
 
-def show_images_horizontally(list_of_files, output_file):
+def show_images_horizontally(
+    list_of_files: np.array,
+    output_file: str | None = None,
+    interact: bool = False
+    ) -> None:
     '''
     Visualize the list of images horizontally and save the figure as PNG.
+    
+    Args:
+        list_of_files: The list of images as numpy array with shape (N, H, W, C).
+        output_file: The output file path to save the figure as PNG.
+        interact: Whether to show the figure interactively in Jupyter Notebook or not in Python.
     '''
     number_of_files = len(list_of_files)
-    
+
     heights = [a[0].shape[0] for a in list_of_files]
     widths = [a.shape[1] for a in list_of_files[0]]
 
@@ -91,30 +175,33 @@ def show_images_horizontally(list_of_files, output_file):
         axs[i].axis("off")
         
     # Save the figure as PNG
-    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.25)
+    if interact:
+        plt.show()
+    else:
+        plt.savefig(output_file, bbox_inches="tight", pad_inches=0.25)
         
         
-def save_image(image, file_name):
+def save_image(image: np.array, file_name: str) -> None:
     '''
     Save the image as JPG.
     
     Args:
-    - image: The input image as numpy array with shape (H, W, C).
-    - file_name: The file name to save the image.
+        image: The input image as numpy array with shape (H, W, C).
+        file_name: The file name to save the image.
     '''
     image = Image.fromarray(image)
     image.save(file_name)
 
 
-def load_and_process_images(load_dir):
+def load_and_process_images(load_dir: str) -> np.array:
     '''
     Load and process the images into numpy array from the directory.
     
     Args:
-    - load_dir: The directory to load the images.
+        load_dir: The directory to load the images.
     
     Returns:
-    - images: The images as numpy array with shape (N, H, W, C).
+        images: The images as numpy array with shape (N, H, W, C).
     '''
     images = []
     print(load_dir)
@@ -127,11 +214,28 @@ def load_and_process_images(load_dir):
     return images
 
 
-def compute_lpips(images, lpips_model, device="cuda"):
+def compute_lpips(images: np.array, lpips_model: LPIPS) -> np.array:
+    '''
+    Compute the LPIPS of the input images.
+    
+    Args:
+        images: The input images as numpy array with shape (N, H, W, C).
+        lpips_model: The LPIPS model used to compute perceptual distances.
+        
+    Returns:
+        distances: The LPIPS of the input images.
+    '''
+    # Get device of lpips_model
+    device = next(lpips_model.parameters()).device
+    device = str(device)
+    
+    # Change the input images into tensor
     images = torch.tensor(images).to(device).float()
     images = torch.permute(images, (0, 3, 1, 2))
     normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     images = normalize(images)
+    
+    # Compute the LPIPS between each adjacent input images
     distances = []
     for i in range(images.shape[0]):
         if i == images.shape[0] - 1:
@@ -144,26 +248,16 @@ def compute_lpips(images, lpips_model, device="cuda"):
     return distances
 
 
-def compute_wasserstein_distances(images):
+def compute_gini(distances: np.array) -> float:
     '''
-    Compute the Wasserstein distances between each pair of consecutive images.
+    Compute the Gini index of the input distances.
     
     Args:
-    - images: The input images as numpy array with shape (N, H, W, C).
+        distances: The input distances as numpy array.
     
     Returns:
-    - distances: The Wasserstein distances as a list of float. (N-1, )
+        gini: The Gini index of the input distances.
     '''
-    distances = []
-    for i in range(len(images) - 1):
-        img1 = images[i].ravel()  # Flatten the image array
-        img2 = images[i + 1].ravel()  # Flatten the next image array
-        distance = wasserstein_distance(img1, img2)
-        distances.append(distance)
-    return distances
-
-
-def compute_gini(distances):
     if len(distances) < 2:
         return 0.0  # Gini index is 0 for less than two elements
 
@@ -174,8 +268,8 @@ def compute_gini(distances):
 
     # Compute the sum of absolute differences
     sum_of_differences = 0
-    for i, di in enumerate(sorted_distances):
-        for j, dj in enumerate(sorted_distances):
+    for di in sorted_distances:
+        for dj in sorted_distances:
             sum_of_differences += abs(di - dj)
 
     # Normalize the sum of differences by the mean and the number of elements
@@ -183,80 +277,40 @@ def compute_gini(distances):
     return gini
 
 
-def compute_smoothness_and_efficiency(images, lpips_model, device="cuda"):
+def compute_smoothness_and_consistency(
+    images: np.array,
+    lpips_model: LPIPS
+    ) -> tuple:
     '''
     Compute the smoothness and efficiency of the input images.
     
     Args:
-    - images: The input images as numpy array with shape (N, H, W, C).
+        images: The input images as numpy array with shape (N, H, W, C).
+        lpips_model: The LPIPS model used to compute perceptual distances.
     
     Returns:
-    - smoothness: One minus gini index of LPIPS of consecutive images.
-    - efficiency: Mean of LPIPS of consecutive images.
+        smoothness: One minus gini index of LPIPS of consecutive images.
+        consistency: The mean LPIPS of consecutive images.
+        max_inception_distance: The maximum LPIPS of consecutive images.
     '''
-    distances = compute_lpips(images, lpips_model, device)
+    distances = compute_lpips(images, lpips_model)
     smoothness = 1 - compute_gini(distances)
-    avg_inception_distance = np.mean(distances)
-    max_inception_distance = np.amax(distances)
-    return smoothness, avg_inception_distance, max_inception_distance
+    consistency = np.mean(distances)
+    max_inception_distance = np.max(distances)
+    return smoothness, consistency, max_inception_distance
 
 
-def calculate_fid(act1, act2):
-    '''
-    Calculate the Frechet Inception Distance (FID) between two sets of activations.
-    
-    Args:
-    - act1: The activations of the first set of images as numpy array with shape (N, D).
-    - act2: The activations of the second set of images as numpy array with shape (M, D).
-    
-    Returns:
-    - fid: The Frechet Inception Distance between the two sets of activations.
-    '''
-    print(act1.shape, act2.shape)
-    # Calculate mean and covariance statistics
-    mu1, sigma1 = act1.mean(axis=0), np.cov(act1, rowvar=False)
-    mu2, sigma2 = act2.mean(axis=0), np.cov(act2, rowvar=False)
-    # Compute the square root of product of covariances
-    covmean = sqrtm(sigma1.dot(sigma2))
-    # Check and correct imaginary numbers from sqrtm
-    if np.iscomplexobj(covmean):
-        covmean = covmean.real
-    # Calculate FID
-    print(np.sum((mu1 - mu2) ** 2))
-    fid = np.sum((mu1 - mu2) ** 2) + np.trace(sigma1 + sigma2 - 2 * covmean)
-    return fid
-
-
-def load_inception_model(device="cuda"):
-    '''
-    Load the pretrained Inception v3 model.
-    '''
-    inception_model = inception_v3(pretrained=True, transform_input=False).to(device)
-    inception_model.eval()
-    return inception_model
-
-
-def get_inception_features(images, inception_model, device="cuda"):
-    '''
-    Get the Inception features of the input images.
-    '''
-    # Convert numpy images to PyTorch tensors and normalize
-    images = torch.tensor(images).to(device).float()
-    images = torch.permute(images, (0, 3, 1, 2))
-    normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    images = normalize(images)
-    # Resize images to fit Inception v3 size requirements
-    images = torch.nn.functional.interpolate(images, size=(299, 299), mode='bilinear', align_corners=False)
-    # Use Inception model to extract features
-    with torch.no_grad():
-        features = inception_model(images).detach().cpu().numpy()
-    return features
-
-
-def seperate_source_and_interpolated_images(images):
+def seperate_source_and_interpolated_images(images: np.array) -> tuple:
     '''
     Seperate the input images into source and interpolated images.
     The input source is the start and end of the images, while the interpolated images are the rest.
+    
+    Args:
+        images: The input images as numpy array with shape (N, H, W, C).
+    
+    Returns:
+        source: The source images as numpy array with shape (2, H, W, C).
+        interpolation: The interpolated images as numpy array with shape (N-2, H, W, C).
     '''
     # Check if the array has at least two elements
     if len(images) < 2:
@@ -268,25 +322,3 @@ def seperate_source_and_interpolated_images(images):
     # Second part takes the rest of the elements
     interpolation = images[1:-1]
     return source, interpolation
-
-
-def compute_fidelity(list_images, model, device="cuda"):
-    '''
-    Compute the Fidelity of the input images.
-    '''
-    source_features = None
-    interpolated_features = None
-    for images in list_images:
-        source_images, interpolated_images = seperate_source_and_interpolated_images(images)
-        if source_features is None:
-            source_features = get_inception_features(source_images, model, device)
-        else:
-            source_features = np.concatenate((source_features, get_inception_features(source_images, model, device)))
-        if interpolated_features is None:
-            interpolated_features = get_inception_features(interpolated_images, model, device)
-        else:
-            interpolated_features = np.concatenate((interpolated_features, get_inception_features(interpolated_images, model, device)))
-
-    fid_score = calculate_fid(source_features, interpolated_features)
-    return fid_score
-

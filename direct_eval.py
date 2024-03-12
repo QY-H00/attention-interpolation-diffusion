@@ -8,7 +8,7 @@ from tqdm.auto import tqdm
 import lpips
 from diffusion import InterpolationStableDiffusionPipeline
 
-from utils import save_image, load_and_process_images, compute_smoothness_and_efficiency, compute_fidelity, load_inception_model, baysian_prior_selection
+from utils import save_image, load_and_process_images, compute_smoothness_and_consistency, compute_fidelity, load_inception_model, baysian_prior_selection
 
 
 def increase_img_num(root_dir, sub="source"):
@@ -135,7 +135,7 @@ def eval_imgs(root_dir):
                 continue
             trial_dir = os.path.join(pair_dir, trial_dir)
             images = load_and_process_images(trial_dir)
-            smoothness, efficiency, max_distance = compute_smoothness_and_efficiency(images, lpips_model, device)
+            smoothness, efficiency, max_distance = compute_smoothness_and_consistency(images, lpips_model, device)
             print(f"Smoothness: {smoothness:.4f}, Mean Inception Distance: {efficiency:.4f}, Max Inception Distance: {max_distance:.4f}")
             S += smoothness
             E += efficiency
@@ -150,7 +150,9 @@ def eval_imgs(root_dir):
     return S, E
 
 
-def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is_guide=True, boost_ratio=0.3, early="cross", late="fused", iters=1000, trial_per_iters=5, size=5):
+def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", 
+                 is_guide=True, boost_ratio=0.3, early="cross", late="fused", 
+                 iters=1000, trial_per_iters=5, size=5, beta_prior=False):
     # Load the corpus
     captions_list = load_corpus(corpus_name)
     
@@ -182,6 +184,12 @@ def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is
             method_name_spec += "_guide"
     else:
         method_name_spec = method_name
+    
+    if not beta_prior:
+        method_name_spec += "_no_beta_prior"
+    else:
+        method_name_spec += '_beta_prior'
+    
     results_dir = create_results_dir(method_name_spec, corpus_name)
     pairwise_dir = os.path.join(results_dir, "pairwise")
     os.makedirs(pairwise_dir, exist_ok=True)
@@ -212,13 +220,36 @@ def prepare_imgs(lpips_model, corpus_name="laion5b", method_name="attention", is
             num_inference_steps = 25
             
             if method_name == "baseline":
-                images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=None, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self")
+                if beta_prior:
+                    alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=None, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self")
+                else:
+                    alpha, beta = 1, 1
+                images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=None, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self", alpha=alpha, beta=beta)
+            elif method_name == "sphere_baseline":
+                if beta_prior:
+                    alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=None, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self")
+                else:
+                    alpha, beta = 1, 1
+                images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=None, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self", alpha=alpha, beta=beta, init="sphere")
+            elif method_name == "denoising":
+                if beta_prior:
+                    alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=None, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self")
+                else:
+                    alpha, beta = 1, 1
+                images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=None, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early="self", late="self", alpha=alpha, beta=beta, init="denoising")
+            elif method_name == "latent":
+                images = pipe.interpolate_naive(latent, latent, prompt1, prompt2, mode='latent')
+            elif method_name == "image":
+                images = pipe.interpolate_naive(latent, latent, prompt1, prompt2, mode='image')
             elif method_name == "attention":
                 if is_guide:
                     guide_prompt = f"{prompt1} and {prompt2}"
                 else:
                     guide_prompt = None
-                alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=guide_prompt, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+                if beta_prior:
+                    alpha, beta = baysian_prior_selection(pipe, latent, latent, prompt1, prompt2, lpips_model, guide_prompt=guide_prompt, size=3, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late)
+                else:
+                    alpha, beta = 1, 1
                 images = pipe.interpolate_save_gpu(latent, latent, prompt1, prompt2, guide_prompt=guide_prompt, size=size, num_inference_steps=num_inference_steps, boost_ratio=boost_ratio, early=early, late=late, alpha=alpha, beta=beta)
             else:
                 raise ValueError("Invalid method name.")
@@ -233,11 +264,16 @@ if __name__ == "__main__":
     parser.add_argument('--corpus_name', type=str, help='The name of the corpus')
     parser.add_argument('--method_name', type=str, help='The name of the method')
     parser.add_argument('--early', default='self', nargs='?', type=str, help='Early attention interpolation mechanism or Self attention')
+    parser.add_argument('--boost_ratio', default=1.0, nargs='?', type=float, help='Early attention interpolation mechanism or Self attention')
     parser.add_argument('--is_guide', action='store_true', help='Set the flag to True')
+    parser.add_argument('--no_beta_prior', action='store_false', dest='beta_prior', help='Set this to disable the flag.')
     args = parser.parse_args()
     
-    # lpips_model = lpips.LPIPS(net="vgg").to("cuda")
-    # root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, is_guide=args.is_guide, boost_ratio=1.0, early=args.early, late="self", iters=100, trial_per_iters=1, size=7)
-    root_dir = "/home/qiyuan/attention-interpolation-diffusion/results/direct_eval/baseline/laion5b"
+    lpips_model = lpips.LPIPS(net="vgg").to("cuda")
+    root_dir = prepare_imgs(lpips_model, corpus_name=args.corpus_name, method_name=args.method_name, 
+                            is_guide=args.is_guide, boost_ratio=args.boost_ratio, 
+                            beta_prior=args.beta_prior, early=args.early, late="self", 
+                            iters=100, trial_per_iters=1, size=7)
+    # root_dir = "/home/qiyuan/attention-interpolation-diffusion/results/direct_eval/sphere_baseline_no_beta_prior/laion5b"
     eval_imgs(root_dir)
     sort_source_and_interpolated(root_dir)

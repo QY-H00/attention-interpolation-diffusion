@@ -7,4 +7,4 @@ cd attention-interpolation-diffusion
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
 conda activate AID
-python direct_eval.py --corpus_name laion5b --method_name baseline --early self --no_beta_prior
+python direct_eval.py --corpus_name cifar10 --method_name attention --early vfused --is_guide
