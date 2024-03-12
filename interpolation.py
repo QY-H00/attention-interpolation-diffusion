@@ -1,5 +1,5 @@
 from typing import Optional
-from scipy.stats import beta as beta_distribution
+from prior import generate_beta_tensor
 import torch
 from torch import FloatTensor, LongTensor, Tensor, Size
 
@@ -368,24 +368,3 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
 
     return out
 
-
-def generate_beta_tensor(size: int, alpha: float = 3, beta: float = 3) -> FloatTensor:
-    """
-    Assume size as n
-    Generates a PyTorch tensor of values [x0, x1, ..., xn-1] for the Beta distribution
-    where each xi satisfies F(xi) = i/(n-1) for the CDF F of the Beta distribution.
-
-    Args:
-        size (int): The number of values to generate.
-        alpha (float): The alpha parameter of the Beta distribution.
-        beta (float): The beta parameter of the Beta distribution.
-
-    Returns:
-        torch.Tensor: A tensor of the inverse CDF values of the Beta distribution.
-    """
-    # Generating the inverse CDF values
-    prob_values = [i / (size-1) for i in range(size)]
-    inverse_cdf_values = beta_distribution.ppf(prob_values, alpha, beta)
-
-    # Converting to a PyTorch tensor
-    return torch.tensor(inverse_cdf_values, dtype=torch.float32)

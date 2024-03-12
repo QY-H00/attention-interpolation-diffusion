@@ -63,6 +63,37 @@ class InterpolationStableDiffusionPipeline:
             for param in self.vae.parameters():
                 param.requires_grad = False
 
+    def generate_latent(
+            self, 
+            generator: Optional[torch.Generator] = None,
+            torch_device: str = "cuda"
+        ) -> torch.FloatTensor:
+        '''
+        Generates a random latent tensor.
+
+        Args:
+            generator (Optional[torch.Generator], optional): Generator for random number generation. Defaults to None.
+            torch_device (str, optional): Device to store the tensor. Defaults to "cuda".
+
+        Returns:
+            torch.FloatTensor: Random latent tensor.
+        '''
+        channel = self.unet.config.in_channels
+        height = self.unet.config.sample_size
+        width = self.unet.config.sample_size
+        if generator is None:
+            latent = torch.randn(
+                (1, channel, height, width),
+                device=torch_device,
+            )
+            return latent
+        latent = torch.randn(
+            (1, channel, height, width),
+            generator=generator,
+            device=torch_device,
+        )
+        return latent
+    
     def prompt_to_embedding(self, prompt: str, negative_prompt: str = "") -> torch.FloatTensor:
         '''
         Prepare the text prompt for the diffusion process
