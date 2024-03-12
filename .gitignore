@@ -12,5 +12,6 @@ exp_vfused_sfused.ipynb
 exp_real_image.ipynb
 hf_auth
 direct_eval.py
+play.py
 refinement_eval.py
 edict.py
