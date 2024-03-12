@@ -4,8 +4,10 @@ This repository is the official implementation of [AID: Attention Interpolation 
 
 He Qiyuan, Wang Jinghao, Liu Ziwei, Angela Yao
 
+![Local Image](./example/Pikachu_Gundam.png)
+![Local Image](./example/paid.png)
 
-
+*Our method enables diffusion model to interpolate between two prompts with different prompt guidance.*
 
 ## Google Colab
 
@@ -26,3 +28,10 @@ pip install requirements.txt
 ```
 
 3. Go to `play.ipynb` for fun!
+
+## Results
+
+![Local Image](./example/paid_1.png)
+![Local Image](./example/paid_2.png)
+![Local Image](./example/paid_3.png)
+![Local Image](./example/paid_4.png)
