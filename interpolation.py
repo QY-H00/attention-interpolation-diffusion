@@ -1,15 +1,16 @@
 from typing import Optional
-from prior import generate_beta_tensor
+
 import torch
-from torch import FloatTensor, LongTensor, Tensor, Size
+from torch import FloatTensor, LongTensor, Size, Tensor
+
+from prior import generate_beta_tensor
 
 
-USE_PEFT_BACKEND = False
 
 class OuterInterpolatedAttnProcessor:
     r"""
     Personalized processor for performing outer attention interpolation.
-    
+
     The attention output of interpolated image is obtained by:
     (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
     If fused with self-attention:
@@ -23,11 +24,11 @@ class OuterInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda"
-        ):
-        '''
+        torch_device="cuda",
+    ):
+        """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
-        '''
+        """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
             ts[0], ts[-1] = 0, 1
@@ -36,7 +37,7 @@ class OuterInterpolatedAttnProcessor:
             ts = [0, t, 1]
             ts = torch.tensor(ts)
             size = 3
- 
+
         self.size = size
         self.coef = ts.to(torch_device)
         self.is_fused = is_fused
@@ -48,11 +49,9 @@ class OuterInterpolatedAttnProcessor:
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
-        scale: float = 1.0,
     ) -> torch.Tensor:
         residual = hidden_states
 
-        args = () if USE_PEFT_BACKEND else (scale,)
 
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
@@ -61,26 +60,36 @@ class OuterInterpolatedAttnProcessor:
 
         if input_ndim == 4:
             batch_size, channel, height, width = hidden_states.shape
-            hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
+            hidden_states = hidden_states.view(
+                batch_size, channel, height * width
+            ).transpose(1, 2)
 
         batch_size, sequence_length, _ = (
-            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
+            hidden_states.shape
+            if encoder_hidden_states is None
+            else encoder_hidden_states.shape
         )
-        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
+        attention_mask = attn.prepare_attention_mask(
+            attention_mask, sequence_length, batch_size
+        )
 
         if attn.group_norm is not None:
-            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(
+                1, 2
+            )
 
-        query = attn.to_q(hidden_states, *args)
+        query = attn.to_q(hidden_states)
         query = attn.head_to_batch_dim(query)
 
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
         elif attn.norm_cross:
-            encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+            encoder_hidden_states = attn.norm_encoder_hidden_states(
+                encoder_hidden_states
+            )
 
-        key = attn.to_k(encoder_hidden_states, *args)
-        value = attn.to_v(encoder_hidden_states, *args)
+        key = attn.to_k(encoder_hidden_states)
+        value = attn.to_v(encoder_hidden_states)
 
         # Specify the first and last key and value
         key_begin = key[0:1]
@@ -88,10 +97,10 @@ class OuterInterpolatedAttnProcessor:
         value_begin = value[0:1]
         value_end = value[-1:]
 
-        key_begin = torch.cat([key_begin]*(self.size))
-        key_end = torch.cat([key_end]*(self.size))
-        value_begin = torch.cat([value_begin]*(self.size))
-        value_end = torch.cat([value_end]*(self.size))
+        key_begin = torch.cat([key_begin] * (self.size))
+        key_end = torch.cat([key_end] * (self.size))
+        value_begin = torch.cat([value_begin] * (self.size))
+        value_end = torch.cat([value_end] * (self.size))
 
         key_begin = attn.head_to_batch_dim(key_begin)
         value_begin = attn.head_to_batch_dim(value_begin)
@@ -111,23 +120,27 @@ class OuterInterpolatedAttnProcessor:
         hidden_states_end = torch.bmm(attention_probs_end, value_end)
         hidden_states_end = attn.batch_to_head_dim(hidden_states_end)
 
-        attention_probs_begin = attn.get_attention_scores(query, key_begin, attention_mask)
+        attention_probs_begin = attn.get_attention_scores(
+            query, key_begin, attention_mask
+        )
         hidden_states_begin = torch.bmm(attention_probs_begin, value_begin)
         hidden_states_begin = attn.batch_to_head_dim(hidden_states_begin)
 
         # Apply outer interpolation on attention
         coef = self.coef.reshape(-1, 1, 1)
         hidden_states = (1 - coef) * hidden_states_begin + coef * hidden_states_end
-        
-        hidden_states = attn.to_out[0](hidden_states, *args)
+
+        hidden_states = attn.to_out[0](hidden_states)
         hidden_states = attn.to_out[1](hidden_states)
 
         if input_ndim == 4:
-            hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
+            hidden_states = hidden_states.transpose(-1, -2).reshape(
+                batch_size, channel, height, width
+            )
 
         if attn.residual_connection:
             hidden_states = hidden_states + residual
-        
+
         hidden_states = hidden_states / attn.rescale_output_factor
 
         return hidden_states
@@ -136,7 +149,7 @@ class OuterInterpolatedAttnProcessor:
 class InnerInterpolatedAttnProcessor:
     r"""
     Personalized processor for performing inner attention interpolation.
-    
+
     The attention output of interpolated image is obtained by:
     (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
     If fused with self-attention:
@@ -150,11 +163,11 @@ class InnerInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda"
-        ):
-        '''
+        torch_device="cuda",
+    ):
+        """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
-        '''
+        """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
             ts[0], ts[-1] = 0, 1
@@ -163,7 +176,7 @@ class InnerInterpolatedAttnProcessor:
             ts = [0, t, 1]
             ts = torch.tensor(ts)
             size = 3
- 
+
         self.size = size
         self.coef = ts.to(torch_device)
         self.is_fused = is_fused
@@ -175,11 +188,8 @@ class InnerInterpolatedAttnProcessor:
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
-        scale: float = 1.0,
     ) -> torch.Tensor:
         residual = hidden_states
-
-        args = () if USE_PEFT_BACKEND else (scale,)
 
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
@@ -188,26 +198,36 @@ class InnerInterpolatedAttnProcessor:
 
         if input_ndim == 4:
             batch_size, channel, height, width = hidden_states.shape
-            hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
+            hidden_states = hidden_states.view(
+                batch_size, channel, height * width
+            ).transpose(1, 2)
 
         batch_size, sequence_length, _ = (
-            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
+            hidden_states.shape
+            if encoder_hidden_states is None
+            else encoder_hidden_states.shape
         )
-        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
+        attention_mask = attn.prepare_attention_mask(
+            attention_mask, sequence_length, batch_size
+        )
 
         if attn.group_norm is not None:
-            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(
+                1, 2
+            )
 
-        query = attn.to_q(hidden_states, *args)
+        query = attn.to_q(hidden_states)
         query = attn.head_to_batch_dim(query)
 
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
         elif attn.norm_cross:
-            encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+            encoder_hidden_states = attn.norm_encoder_hidden_states(
+                encoder_hidden_states
+            )
 
-        key = attn.to_k(encoder_hidden_states, *args)
-        value = attn.to_v(encoder_hidden_states, *args)
+        key = attn.to_k(encoder_hidden_states)
+        value = attn.to_v(encoder_hidden_states)
 
         # Specify the first and last key and value
         key_start = key[0:1]
@@ -215,10 +235,10 @@ class InnerInterpolatedAttnProcessor:
         value_start = value[0:1]
         value_end = value[-1:]
 
-        key_start = torch.cat([key_start]*(self.size))
-        key_end = torch.cat([key_end]*(self.size))
-        value_start = torch.cat([value_start]*(self.size))
-        value_end = torch.cat([value_end]*(self.size))
+        key_start = torch.cat([key_start] * (self.size))
+        key_end = torch.cat([key_end] * (self.size))
+        value_start = torch.cat([value_start] * (self.size))
+        value_end = torch.cat([value_end] * (self.size))
 
         # Apply inner interpolation on attention
         coef = self.coef.reshape(-1, 1, 1)
@@ -239,11 +259,13 @@ class InnerInterpolatedAttnProcessor:
 
         hidden_states = torch.bmm(attention_probs, value_cross)
         hidden_states = attn.batch_to_head_dim(hidden_states)
-        hidden_states = attn.to_out[0](hidden_states, *args)
+        hidden_states = attn.to_out[0](hidden_states)
         hidden_states = attn.to_out[1](hidden_states)
 
         if input_ndim == 4:
-            hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
+            hidden_states = hidden_states.transpose(-1, -2).reshape(
+                batch_size, channel, height, width
+            )
 
         if attn.residual_connection:
             hidden_states = hidden_states + residual
@@ -251,28 +273,25 @@ class InnerInterpolatedAttnProcessor:
         hidden_states = hidden_states / attn.rescale_output_factor
 
         return hidden_states
-    
+
 
 def linear_interpolation(
-    l1: FloatTensor,
-    l2: FloatTensor,
-    ts: Optional[FloatTensor] = None,
-    size: int=5
-    ) -> FloatTensor:
-    '''
+    l1: FloatTensor, l2: FloatTensor, ts: Optional[FloatTensor] = None, size: int = 5
+) -> FloatTensor:
+    """
     Linear interpolation
-    
+
     Args:
     l1: Starting vector: (1, *)
     l2: Final vector: (1, *)
     ts: FloatTensor, interpolation points between 0 and 1
     size: int, number of interpolation points including l1 and l2
-    
+
     Returns:
     Interpolated vectors: (size, *)
-    '''
+    """
     assert l1.shape == l2.shape, "shapes of l1 and l2 must match"
-    
+
     res = []
     if ts is not None:
         for t in ts:
@@ -288,19 +307,19 @@ def linear_interpolation(
 
 
 def spherical_interpolation(l1: FloatTensor, l2: FloatTensor, size=5) -> FloatTensor:
-    '''
+    """
     Spherical interpolation
-    
+
     Args:
         l1: Starting vector: (1, *)
         l2: Final vector: (1, *)
         size: int, number of interpolation points including l1 and l2
-    
+
     Returns:
         Interpolated vectors: (size, *)
-    '''
+    """
     assert l1.shape == l2.shape, "shapes of l1 and l2 must match"
-    
+
     res = []
     for i in range(size):
         t = i / (size - 1)
@@ -311,7 +330,7 @@ def spherical_interpolation(l1: FloatTensor, l2: FloatTensor, size=5) -> FloatTe
 
 
 def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
-    '''
+    """
     Spherical linear interpolation
     Args:
         v0: Starting vector
@@ -321,7 +340,7 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
                                 colinear. Not recommended to alter this.
     Returns:
         Interpolation vector between v0 and v1
-    '''
+    """
     assert v0.shape == v1.shape, "shapes of v0 and v1 must match"
 
     # Normalize the vectors to get the directions and angles
@@ -340,9 +359,11 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
     gotta_lerp: LongTensor = dot_mag.isnan() | (dot_mag > threshold)
     can_slerp: LongTensor = ~gotta_lerp
 
-    t_batch_dim_count: int = max(0, t.dim()-v0.dim()) if isinstance(t, Tensor) else 0
-    t_batch_dims: Size = t.shape[:t_batch_dim_count] if isinstance(t, Tensor) else Size([])
-    out: FloatTensor = torch.zeros_like(v0.expand(*t_batch_dims, *[-1]*v0.dim()))
+    t_batch_dim_count: int = max(0, t.dim() - v0.dim()) if isinstance(t, Tensor) else 0
+    t_batch_dims: Size = (
+        t.shape[:t_batch_dim_count] if isinstance(t, Tensor) else Size([])
+    )
+    out: FloatTensor = torch.zeros_like(v0.expand(*t_batch_dims, *[-1] * v0.dim()))
 
     # if no elements are lerpable, our vectors become 0-dimensional, preventing broadcasting
     if gotta_lerp.any():
@@ -367,4 +388,3 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
         out: FloatTensor = slerped.where(can_slerp.unsqueeze(-1), out)
 
     return out
-
