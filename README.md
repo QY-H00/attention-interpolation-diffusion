@@ -5,7 +5,7 @@
 ### <div align="center">(P)AID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div> 
 
 <div align="center">
-<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-xxxxxx-b31b1b.svg></a><a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src=https://colab.research.google.com/assets/colab-badge.svg></a>
+<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-xxxxxx-b31b1b.svg></a> <a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src=https://colab.research.google.com/assets/colab-badge.svg></a>
 <a herf=><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue>
 </div>
 
@@ -34,7 +34,6 @@
 ## Abstract
 
 <b>TL; DR: <font color="red">AID</font> is a method that enables diffusion model to interpolate between two text prompts. Its variant, PAID, provides further control of the interpolation results via prompt guidance.</b>
-
 
 ## Google Colab
 
@@ -66,7 +65,7 @@ Our method provides customized and rich configurations for users to play with an
 
 ### Prompt-guided Interpolation
 
-## Supports Models
+## Supporting Models
 
 Currently, we support the following models:
 
