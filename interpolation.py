@@ -19,7 +19,7 @@ class OuterInterpolatedAttnProcessor:
 
     def __init__(
         self,
-        t: float | None = None,
+        t: Optional[float]= None,
         size: int = 7,
         is_fused: bool = False,
         alpha: float = 1,
@@ -27,7 +27,7 @@ class OuterInterpolatedAttnProcessor:
         torch_device="cuda",
     ):
         """
-        t: float, interpolation point between 0 and 1, if specified, size is set to 3
+        t: float, interpolation point between 0 and 1, if not specified, size is set to 3
         """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
@@ -158,7 +158,7 @@ class InnerInterpolatedAttnProcessor:
 
     def __init__(
         self,
-        t: float | None = None,
+        t: Optional[float]= None,
         size: int = 7,
         is_fused: bool = False,
         alpha: float = 1,
@@ -166,7 +166,7 @@ class InnerInterpolatedAttnProcessor:
         torch_device="cuda",
     ):
         """
-        t: float, interpolation point between 0 and 1, if specified, size is set to 3
+        t: float, interpolation point between 0 and 1, if not specified, size is set to 3
         """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
