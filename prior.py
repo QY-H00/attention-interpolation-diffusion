@@ -6,7 +6,7 @@ from scipy.stats import beta as beta_distribution
 from utils import compute_lpips, compute_smoothness_and_consistency
 
 
-def baysian_prior_selection(
+def bayesian_prior_selection(
     interpolation_pipe,
     latent1: torch.FloatTensor,
     latent2: torch.FloatTensor,
@@ -52,7 +52,7 @@ def baysian_prior_selection(
 
     def get_smoothness(alpha, beta):
         """
-        Black-box objective function of Baysian Optimization.
+        Black-box objective function of Bayesian Optimization.
         Get the smoothness of the interpolated sequence with the given alpha and beta.
         """
         if alpha < beta and large_alpha_prior:
@@ -103,7 +103,7 @@ def baysian_prior_selection(
     # If perceptual distance to the first source image is smaller, alpha should be larger than beta
     large_alpha_prior = distances[0] < distances[1]
 
-    # Baysian optimization configuration
+    # Bayesian optimization configuration
     num_warmup_steps = warmup_ratio * num_inference_steps
     if p_min is None:
         p_min = 1

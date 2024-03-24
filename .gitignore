@@ -18,3 +18,4 @@ refinement_eval.py
 edict.py
 *.pt
 .vscode/
+shiyishi.*

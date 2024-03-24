@@ -6,7 +6,6 @@ from torch import FloatTensor, LongTensor, Size, Tensor
 from prior import generate_beta_tensor
 
 
-
 class OuterInterpolatedAttnProcessor:
     r"""
     Personalized processor for performing outer attention interpolation.
@@ -19,7 +18,7 @@ class OuterInterpolatedAttnProcessor:
 
     def __init__(
         self,
-        t: Optional[float]= None,
+        t: Optional[float] = None,
         size: int = 7,
         is_fused: bool = False,
         alpha: float = 1,
@@ -27,7 +26,7 @@ class OuterInterpolatedAttnProcessor:
         torch_device="cuda",
     ):
         """
-        t: float, interpolation point between 0 and 1, if not specified, size is set to 3
+        t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
@@ -51,7 +50,6 @@ class OuterInterpolatedAttnProcessor:
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         residual = hidden_states
-
 
         if attn.spatial_norm is not None:
             hidden_states = attn.spatial_norm(hidden_states, temb)
@@ -158,7 +156,7 @@ class InnerInterpolatedAttnProcessor:
 
     def __init__(
         self,
-        t: Optional[float]= None,
+        t: Optional[float] = None,
         size: int = 7,
         is_fused: bool = False,
         alpha: float = 1,
@@ -166,7 +164,7 @@ class InnerInterpolatedAttnProcessor:
         torch_device="cuda",
     ):
         """
-        t: float, interpolation point between 0 and 1, if not specified, size is set to 3
+        t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
         if t is None:
             ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
@@ -282,10 +280,10 @@ def linear_interpolation(
     Linear interpolation
 
     Args:
-    l1: Starting vector: (1, *)
-    l2: Final vector: (1, *)
-    ts: FloatTensor, interpolation points between 0 and 1
-    size: int, number of interpolation points including l1 and l2
+        l1: Starting vector: (1, *)
+        l2: Final vector: (1, *)
+        ts: FloatTensor, interpolation points between 0 and 1
+        size: int, number of interpolation points including l1 and l2
 
     Returns:
     Interpolated vectors: (size, *)

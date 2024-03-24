@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +10,7 @@ from torchvision.transforms import Normalize
 
 
 def show_images_horizontally(
-    list_of_files: np.array, output_file: str | None = None, interact: bool = False
+    list_of_files: np.array, output_file: Optional[str] = None, interact: bool = False
 ) -> None:
     """
     Visualize the list of images horizontally and save the figure as PNG.
@@ -164,9 +165,9 @@ def compute_smoothness_and_consistency(images: np.array, lpips_model: LPIPS) -> 
     return smoothness, consistency, max_inception_distance
 
 
-def seperate_source_and_interpolated_images(images: np.array) -> tuple:
+def separate_source_and_interpolated_images(images: np.array) -> tuple:
     """
-    Seperate the input images into source and interpolated images.
+    Separate the input images into source and interpolated images.
     The input source is the start and end of the images, while the interpolated images are the rest.
 
     Args:

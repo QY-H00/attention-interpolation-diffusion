@@ -109,14 +109,15 @@ class InterpolationStableDiffusionPipeline:
                 (1, channel, height, width),
                 device=torch_device,
             )
-            return latent
-        latent = torch.randn(
-            (1, channel, height, width),
-            generator=generator,
-            device=torch_device,
-        )
+        else:
+            latent = torch.randn(
+                (1, channel, height, width),
+                generator=generator,
+                device=torch_device,
+            )
         return latent
 
+    @torch.no_grad()
     def prompt_to_embedding(
         self, prompt: str, negative_prompt: str = ""
     ) -> torch.FloatTensor:
@@ -139,16 +140,15 @@ class InterpolationStableDiffusionPipeline:
             return_tensors="pt",
         )
 
-        with torch.no_grad():
-            text_embeddings = self.text_encoder(
-                text_input.input_ids.to(self.torch_device)
-            )[0]
+        text_embeddings = self.text_encoder(text_input.input_ids.to(self.torch_device))[
+            0
+        ]
 
-        max_length = text_input.input_ids.shape[-1]
         uncond_input = self.tokenizer(
-            [negative_prompt] * 1,
+            negative_prompt,
             padding="max_length",
-            max_length=max_length,
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
             return_tensors="pt",
         )
         uncond_embeddings = self.text_encoder(
@@ -158,38 +158,43 @@ class InterpolationStableDiffusionPipeline:
         text_embeddings = torch.cat([text_embeddings, uncond_embeddings])
         return text_embeddings
 
+    @torch.no_grad()
     def interpolate(
         self,
         latent_start: torch.FloatTensor,
         latent_end: torch.FloatTensor,
         prompt_start: str,
         prompt_end: str,
-        guide_prompt: str = None,
+        guide_prompt: Optional[str] = None,
         negative_prompt: str = "",
         size: int = 7,
         num_inference_steps: int = 25,
         warmup_ratio: float = 0.5,
         early: str = "fused_outer",
         late: str = "self",
+        alpha: Optional[float] = None,
+        beta: Optional[float] = None,
     ) -> np.ndarray:
         """
         Interpolate between two generation
 
         Args:
-        latent_start: FloatTensor, latent vector of the first image
-        latent_end: FloatTensor, latent vector of the second image
-        prompt_start: str, text prompt of the first image
-        prompt_end: str, text prompt of the second image
-        guide_prompt: str, text prompt for the interpolation
-        negative_prompt: str, negative text prompt
-        size: int, number of interpolations including starting and ending points
-        num_inference_steps: int, number of inference steps in scheduler
-        warmup_ratio: float, ratio of warmup steps
-        early: str, warmup interpolation methods
-        late: str, late interpolation methods
+            latent_start: FloatTensor, latent vector of the first image
+            latent_end: FloatTensor, latent vector of the second image
+            prompt_start: str, text prompt of the first image
+            prompt_end: str, text prompt of the second image
+            guide_prompt: str, text prompt for the interpolation
+            negative_prompt: str, negative text prompt
+            size: int, number of interpolations including starting and ending points
+            num_inference_steps: int, number of inference steps in scheduler
+            warmup_ratio: float, ratio of warmup steps
+            early: str, warmup interpolation methods
+            late: str, late interpolation methods
+            alpha: float, alpha parameter for beta distribution
+            beta: float, beta parameter for beta distribution
 
         Returns:
-        Numpy array of nterpolated images, shape (size, H, W, 3)
+            Numpy array of interpolated images, shape (size, H, W, 3)
         """
         # Specify alpha and beta
         if alpha is None:
@@ -219,8 +224,10 @@ class InterpolationStableDiffusionPipeline:
                 dim=0,
             )
         else:
-            embs = linear_interpolation(emb_start, emb_end, size)
-            uncond_embs = linear_interpolation(uncond_emb_start, uncond_emb_end, size)
+            embs = linear_interpolation(emb_start, emb_end, size=size)
+            uncond_embs = linear_interpolation(
+                uncond_emb_start, uncond_emb_end, size=size
+            )
 
         # Specify the interpolation methods
         pure_inner_attn_proc = InnerInterpolatedAttnProcessor(
@@ -282,6 +289,7 @@ class InterpolationStableDiffusionPipeline:
         images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
         return images
 
+    @torch.no_grad()
     def interpolate_save_gpu(
         self,
         latent_start: torch.FloatTensor,
@@ -303,23 +311,23 @@ class InterpolationStableDiffusionPipeline:
         Interpolate between two generation
 
         Args:
-        latent_start: FloatTensor, latent vector of the first image
-        latent_end: FloatTensor, latent vector of the second image
-        prompt_start: str, text prompt of the first image
-        prompt_end: str, text prompt of the second image
-        guide_prompt: str, text prompt for the interpolation
-        negative_prompt: str, negative text prompt
-        size: int, number of interpolations including starting and ending points
-        num_inference_steps: int, number of inference steps in scheduler
-        warmup_ratio: float, ratio of warmup steps
-        early: str, warmup interpolation methods
-        late: str, late interpolation methods
-        alpha: float, alpha parameter for beta distribution
-        beta: float, beta parameter for beta distribution
-        init: str, interpolation initialization methods
+            latent_start: FloatTensor, latent vector of the first image
+            latent_end: FloatTensor, latent vector of the second image
+            prompt_start: str, text prompt of the first image
+            prompt_end: str, text prompt of the second image
+            guide_prompt: str, text prompt for the interpolation
+            negative_prompt: str, negative text prompt
+            size: int, number of interpolations including starting and ending points
+            num_inference_steps: int, number of inference steps in scheduler
+            warmup_ratio: float, ratio of warmup steps
+            early: str, warmup interpolation methods
+            late: str, late interpolation methods
+            alpha: float, alpha parameter for beta distribution
+            beta: float, beta parameter for beta distribution
+            init: str, interpolation initialization methods
 
         Returns:
-        Numpy array of nterpolated images, shape (size, H, W, 3)
+            Numpy array of interpolated images, shape (size, H, W, 3)
         """
         # Specify alpha and beta
         if alpha is None:
