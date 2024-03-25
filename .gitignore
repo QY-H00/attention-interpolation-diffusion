@@ -17,3 +17,6 @@ direct_eval.py
 play.py
 refinement_eval.py
 edict.py
+*.pt
+.vscode/
+shiyishi.*
