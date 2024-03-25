@@ -11,6 +11,7 @@ exp_beta_prior.ipynb
 exp_illustration.ipynb
 exp_vfused_sfused.ipynb
 exp_real_image.ipynb
+exp_sdxl.ipynb
 hf_auth
 direct_eval.py
 play.py

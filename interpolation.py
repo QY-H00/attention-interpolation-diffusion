@@ -23,7 +23,8 @@ class OuterInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda"
+        torch_device="cuda",
+        dtype=torch.float32
         ):
         '''
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -34,7 +35,7 @@ class OuterInterpolatedAttnProcessor:
         else:
             assert t > 0 and t < 1, "t must be between 0 and 1"
             ts = [0, t, 1]
-            ts = torch.tensor(ts)
+            ts = torch.tensor(ts, dtype=dtype)
             size = 3
  
         self.size = size
@@ -150,7 +151,8 @@ class InnerInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda"
+        torch_device="cuda",
+        dtype=torch.float32
         ):
         '''
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -161,7 +163,7 @@ class InnerInterpolatedAttnProcessor:
         else:
             assert t > 0 and t < 1, "t must be between 0 and 1"
             ts = [0, t, 1]
-            ts = torch.tensor(ts)
+            ts = torch.tensor(ts, dtype=dtype)
             size = 3
  
         self.size = size

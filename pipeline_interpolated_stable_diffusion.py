@@ -1,9 +1,16 @@
-from typing import Optional
+from typing import Optional, Union, List
 from tqdm.auto import tqdm
 import numpy as np
 import torch
-from diffusers import DDIMScheduler, AutoencoderKL, UNet2DConditionModel, UniPCMultistepScheduler, SchedulerMixin
-from diffusers.models.attention_processor import AttnProcessor
+from diffusers import DDIMScheduler, AutoencoderKL, UNet2DConditionModel, UniPCMultistepScheduler, SchedulerMixin, StableDiffusionXLPipeline
+from diffusers.models.attention_processor import (
+    AttnProcessor, 
+    AttnProcessor2_0,
+    FusedAttnProcessor2_0,
+    LoRAAttnProcessor2_0,
+    LoRAXFormersAttnProcessor,
+    XFormersAttnProcessor
+)
 from transformers import CLIPTextModel, CLIPTokenizer
 from interpolation import slerp, linear_interpolation, spherical_interpolation, OuterInterpolatedAttnProcessor, InnerInterpolatedAttnProcessor, generate_beta_tensor
 
@@ -473,4 +480,3 @@ class InterpolationStableDiffusionPipeline:
         images = (image / 2 + 0.5).clamp(0, 1)
         images = (images.permute(0, 2, 3, 1) * 255).to(torch.uint8).cpu().numpy()
         return images
- 
