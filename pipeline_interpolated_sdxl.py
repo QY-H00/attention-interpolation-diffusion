@@ -1807,7 +1807,6 @@ class InterpolatedStableDiffusionXLPipeline(
         # 9. Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
-            print("!!!!!!!!!!!!!!!!")
             guidance_scale_tensor = torch.tensor(self.guidance_scale - 1).repeat(3)
             timestep_cond = self.get_guidance_scale_embedding(
                 guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
@@ -1826,10 +1825,6 @@ class InterpolatedStableDiffusionXLPipeline(
             'fused_outer': fused_outer_attn_proc,
             'self': self_attn_proc
         }
-        
-        print("Embeds Dimension:", prompt_embeds.shape, negative_prompt_embeds.shape, pooled_prompt_embeds.shape, negative_pooled_prompt_embeds.shape)
-        print("Latents Dimension:", latents.shape)
-        print("Time IDs Dimension:", add_time_ids.shape, negative_add_time_ids.shape)
         
         warmup_steps = int(num_inference_steps * warmup_ratio)
         self._num_timesteps = len(timesteps)
