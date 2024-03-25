@@ -19,3 +19,4 @@ edict.py
 *.pt
 .vscode/
 shiyishi.*
+exp_sdxl.ipynb

@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="asset/logo.png"  height=450>
+  <img src="asset/logo.png"  height=350>
 </p>
 
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
 <div align="center">
-<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b31b1b.svg?logo=arxiv></a>
-<a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-0654ff.svg?logo=googlecolab></a>
-<a herf=><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-blue.svg>
-<a herf=><img src= https://img.shields.io/badge/GitHub%20Project%20Page-181717.svg?logo=github>
+<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b31b1b.svg?logo=arxiv height=25px></a>
+<a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-0654ff.svg?logo=googlecolab height=25px></a>
+<a herf=><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-blue.svg height=25px>
+<a herf=https://qy-h00.github.io/attention-interpolation-diffusion/><img src= https://img.shields.io/badge/GitHub%20Project%20Page-181717.svg?logo=github height=25px>
 </div>
 
 <p align="center">
@@ -99,7 +99,7 @@ pip install gradio
 2. Launch the Gradio interface
 
 ``` bash
-grad run gradio.py
+gradio gradio_src/app.py
 ```
 
 ## 🎲 Customized Interpolation

@@ -1,5 +1,6 @@
 import os
 import random
+import uuid
 from typing import Optional
 
 import gradio as gr
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 import user_history
+from PIL import Image
 from scipy.stats import beta as beta_distribution
 
 from pipeline_interpolated_stable_diffusion import InterpolationStableDiffusionPipeline
@@ -23,7 +25,7 @@ How to use:<br>
 1. Input prompt 1 and prompt 2. 
 2. (Optional) Input the guidance prompt and negative prompt.
 3. (Optional) Change the interpolation parameters and check the Beta distribution.
-4. Click the <b>Submit</b> button to begin customization.
+4. Click the <b>Generate</b> button to begin generating images.
 5. Enjoy! 😊"""
 
 article = r"""
@@ -50,13 +52,14 @@ USE_TORCH_COMPILE = False
 ENABLE_CPU_OFFLOAD = os.getenv("ENABLE_CPU_OFFLOAD") == "1"
 PREVIEW_IMAGES = False
 
-dtype = torch.bfloat16
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+dtype = torch.float32
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 pipeline = InterpolationStableDiffusionPipeline(
     repo_name="runwayml/stable-diffusion-v1-5",
     guidance_scale=10.0,
     scheduler_name="unipc",
-).to(device, dtype=dtype)
+)
+pipeline.to(device, dtype=dtype)
 
 
 def change_model_fn(model_name: str) -> None:
@@ -67,11 +70,23 @@ def change_model_fn(model_name: str) -> None:
         "SD2.1-768": "stabilityai/stable-diffusion-2-1",
         "SDXL-1024": "stabilityai/stable-diffusion-xl-base-1.0",
     }
-    pipeline = InterpolationStableDiffusionPipeline(
-        repo_name=name_mapping[model_name],
-        guidance_scale=10.0,
-        scheduler_name="unipc",
-    ).to(device, dtype=dtype)
+    if "XL" not in model_name:
+        pipeline = InterpolationStableDiffusionPipeline(
+            repo_name=name_mapping[model_name],
+            guidance_scale=10.0,
+            scheduler_name="unipc",
+        ).to(device, dtype=dtype)
+    else:
+        pipeline = InterpolationStableDiffusionPipeline.from_pretrained(
+            name_mapping[model_name], torch_dtype=dtype
+        ).to(device, dtype=dtype)
+
+
+def save_image(img, index):
+    unique_name = f"{index}.png"
+    img = Image.fromarray(img)
+    img.save(unique_name)
+    return unique_name
 
 
 def generate_beta_tensor(
@@ -140,57 +155,88 @@ def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
     return seed
 
 
+@torch.no_grad()
 def generate(
     prompt1: str,
     prompt2: str,
-    negative_prompt: str = "",
     guidance_prompt: Optional[str] = None,
+    negative_prompt: str = "",
+    warmup_ratio: int = 8,
+    guidance_scale: float = 10,
+    early: str = "fused_outer",
+    late: str = "self",
+    alpha: float = 4.0,
+    beta: float = 4.0,
+    interpolation_size: int = 3,
     seed: int = 0,
+    same_latent: bool = True,
+    num_inference_steps: int = 50,
+    progress=gr.Progress(),
 ):
+    global pipeline
     generator = torch.Generator().manual_seed(seed)
-    print("prior_num_inference_steps: ", prior_num_inference_steps)
-    prior_output = prior_pipeline(
-        prompt1=prompt1,
-        prompt2=prompt2,
-        height=height,
-        width=width,
-        num_inference_steps=prior_num_inference_steps,
-        negative_prompt=negative_prompt,
-        guidance_scale=prior_guidance_scale,
-        interpolation_size=interpolation_size,
-        generator=generator,
-    )
-
-    decoder_output = decoder_pipeline(
-        image_embeddings=prior_output.image_embeddings,
-        prompt1=prompt1,
-        prompt2=prompt2,
-        num_inference_steps=decoder_num_inference_steps,
-        guidance_scale=decoder_guidance_scale,
-        negative_prompt=negative_prompt,
-        generator=generator,
-        output_type="pil",
-    ).images
-    print(decoder_output)
-    # Save images
-    for image in decoder_output:
-        user_history.save_image(
-            profile=profile,
-            image=image,
-            label=prompt1 + " " + prompt2,
-            metadata={
-                "negative_prompt": negative_prompt,
-                "seed": seed,
-                "width": width,
-                "height": height,
-                "prior_guidance_scale": prior_guidance_scale,
-                "decoder_num_inference_steps": decoder_num_inference_steps,
-                "decoder_guidance_scale": decoder_guidance_scale,
-                "interpolation_size": interpolation_size,
-            },
+    latent1 = pipeline.generate_latent(generator=generator)
+    latent1 = latent1.to(device=pipeline.unet.device, dtype=pipeline.unet.dtype)
+    if same_latent:
+        latent2 = latent1.clone()
+    else:
+        latent2 = pipeline.generate_latent(generator=generator)
+        latent2 = latent2.to(device=pipeline.unet.device, dtype=pipeline.unet.dtype)
+    betas = generate_beta_tensor(size=interpolation_size, alpha=alpha, beta=beta)
+    for i in progress.tqdm(
+        range(interpolation_size - 2),
+        desc=(
+            f"Generating {interpolation_size-2} images"
+            if interpolation_size > 3
+            else "Generating 1 image"
+        ),
+    ):
+        it = betas[i + 1].item()
+        images = pipeline.interpolate_single(
+            it,
+            latent1,
+            latent2,
+            prompt1,
+            prompt2,
+            guide_prompt=guidance_prompt,
+            num_inference_steps=num_inference_steps,
+            warmup_ratio=warmup_ratio,
+            early=early,
+            late=late,
+            negative_prompt=negative_prompt,
+            guidance_scale=guidance_scale,
         )
-
-    yield decoder_output[0]
+        if interpolation_size == 3:
+            final_images = images
+            break
+        if i == 0:
+            final_images = images[:2]
+        elif i == interpolation_size - 3:
+            final_images = np.concatenate([final_images, images[1:]], axis=0)
+        else:
+            final_images = np.concatenate([final_images, images[1:2]], axis=0)
+    # Save images
+    # for image in output:
+    #     user_history.save_image(
+    #         profile=profile,
+    #         image=image,
+    #         label=prompt1 + " " + prompt2,
+    #         metadata={
+    #             "negative_prompt": negative_prompt,
+    #             "seed": seed,
+    #             "width": width,
+    #             "height": height,
+    #             "prior_guidance_scale": prior_guidance_scale,
+    #             "decoder_num_inference_steps": decoder_num_inference_steps,
+    #             "decoder_guidance_scale": decoder_guidance_scale,
+    #             "interpolation_size": interpolation_size,
+    #         },
+    #     )
+    uuids = str(uuid.uuid4())
+    image_paths = [
+        save_image(img, uuids + f"{index}") for index, img in enumerate(final_images)
+    ]
+    return image_paths
 
 
 with gr.Blocks() as demo:
@@ -202,27 +248,17 @@ with gr.Blocks() as demo:
             max_lines=3,
             placeholder="Enter the First Prompt",
             interactive=True,
+            value="A photo of dog, best quality, extremely detailed",
         )
         prompt2 = gr.Text(
             label="Prompt 2",
             max_lines=3,
             placeholder="Enter the Second prompt",
             interactive=True,
+            value="A photo of cat, best quality, extremely detailed",
         )
-        result = gr.Image(label="Result", show_label=False)
+        result = gr.Gallery(label="Result", show_label=False, rows=1)
     with gr.Accordion("Advanced options", open=True):
-        guidance_prompt = gr.Text(
-            label="Guidance prompt",
-            max_lines=3,
-            placeholder="Enter a Guidance Prompt",
-            interactive=True,
-        )
-        negative_prompt = gr.Text(
-            label="Negative prompt",
-            max_lines=3,
-            placeholder="Enter a Negative Prompt",
-            interactive=True,
-        )
         with gr.Group():
             with gr.Column():
                 interpolation_size = gr.Slider(
@@ -236,14 +272,14 @@ with gr.Blocks() as demo:
                 alpha = gr.Slider(
                     label="alpha",
                     minimum=0,
-                    maximum=20,
+                    maximum=50,
                     step=0.1,
                     value=4.0,
                 )
                 beta = gr.Slider(
                     label="beta",
                     minimum=0,
-                    maximum=30,
+                    maximum=50,
                     step=0.1,
                     value=4.0,
                 )
@@ -252,10 +288,25 @@ with gr.Blocks() as demo:
                 y="coefficient",
                 title="Beta Distribution with Sampled Points",
                 height=400,
-                width=300,
+                width=900,
                 overlay_point=True,
                 tooltip=["coefficient", "interpolation index"],
                 interactive=False,
+                show_label=False,
+            )
+        with gr.Group():
+            guidance_prompt = gr.Text(
+                label="Guidance prompt",
+                max_lines=3,
+                placeholder="Enter a Guidance Prompt",
+                interactive=True,
+            )
+            negative_prompt = gr.Text(
+                label="Negative prompt",
+                max_lines=3,
+                placeholder="Enter a Negative Prompt",
+                interactive=True,
+                value="monochrome, lowres, bad anatomy, worst quality, low quality",
             )
         with gr.Row():
             model_choice = gr.Dropdown(
@@ -265,12 +316,12 @@ with gr.Blocks() as demo:
                 interactive=True,
             )
         with gr.Row():
-            warmup_step = gr.Slider(
-                label="Warmup Step",
-                minimum=1,
-                maximum=50,
-                step=1,
-                value=8,
+            warmup_ratio = gr.Slider(
+                label="Warmup Ratio",
+                minimum=0.02,
+                maximum=1,
+                step=0.01,
+                value=0.16,
                 interactive=True,
             )
             guidance_scale = gr.Slider(
@@ -278,48 +329,78 @@ with gr.Blocks() as demo:
                 minimum=0,
                 maximum=50,
                 step=0.1,
-                value=7.5,
+                value=10,
                 interactive=True,
             )
+        num_inference_steps = gr.Slider(
+            label="Inference Steps",
+            minimum=25,
+            maximum=50,
+            step=1,
+            value=50,
+            interactive=True,
+        )
         with gr.Row():
-            late = gr.Dropdown(
-                label="Late stage attention",
-                choices=[
-                    "pure_inner",
-                    "fused_inner",
-                    "pure_outer",
-                    "fused_outer",
-                    "self",
-                ],
-                value="self",
-                type="value",
-                interactive=True,
-            )
-            early = gr.Dropdown(
-                label="Early stage attention",
-                choices=[
-                    "pure_inner",
-                    "fused_inner",
-                    "pure_outer",
-                    "fused_outer",
-                    "self",
-                ],
-                value="fused_outer",
-                type="value",
-                interactive=True,
-            )
-            seed = gr.Slider(
-                label="Seed",
-                minimum=0,
-                maximum=MAX_SEED,
-                step=1,
-                value=0,
-            )
-            randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
-    submit_button = gr.Button("Submit", variant="primary")
+            with gr.Column():
+                early = gr.Dropdown(
+                    label="Early stage attention type",
+                    choices=[
+                        "pure_inner",
+                        "fused_inner",
+                        "pure_outer",
+                        "fused_outer",
+                        "self",
+                    ],
+                    value="fused_outer",
+                    type="value",
+                    interactive=True,
+                )
+                late = gr.Dropdown(
+                    label="Late stage attention type",
+                    choices=[
+                        "pure_inner",
+                        "fused_inner",
+                        "pure_outer",
+                        "fused_outer",
+                        "self",
+                    ],
+                    value="self",
+                    type="value",
+                    interactive=True,
+                )
+            with gr.Column():
+                seed = gr.Slider(
+                    label="Seed",
+                    minimum=0,
+                    maximum=MAX_SEED,
+                    step=1,
+                    value=0,
+                )
+                randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
+                same_latent = gr.Checkbox(
+                    label="Same latent",
+                    value=True,
+                    info="Use the same latent for start and end images",
+                )
+    generate_button = gr.Button("Generate", variant="primary")
     gr.Examples(
         examples=get_example(),
-        inputs=[prompt1, prompt2, guidance_prompt, negative_prompt],
+        inputs=[
+            prompt1,
+            prompt2,
+            guidance_prompt,
+            negative_prompt,
+            warmup_ratio,
+            guidance_scale,
+            early,
+            late,
+            alpha,
+            beta,
+            interpolation_size,
+            seed,
+            same_latent,
+            num_inference_steps,
+        ],
         outputs=result,
         fn=generate,
         cache_examples=CACHE_EXAMPLES,
@@ -341,25 +422,21 @@ with gr.Blocks() as demo:
         prompt2,
         guidance_prompt,
         negative_prompt,
-        seed,
+        warmup_ratio,
+        guidance_scale,
+        early,
+        late,
         alpha,
         beta,
         interpolation_size,
+        seed,
+        same_latent,
+        num_inference_steps,
     ]
-    gr.on(
-        triggers=[
-            submit_button.click,
-        ],
-        fn=randomize_seed_fn,
-        inputs=[seed, randomize_seed],
-        outputs=seed,
-        queue=False,
-        api_name=False,
-    ).then(
+    generate_button.click(
         fn=generate,
         inputs=inputs,
         outputs=result,
-        api_name="run",
     )
     gr.Markdown(article)
 

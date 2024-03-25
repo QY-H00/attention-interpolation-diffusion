@@ -23,7 +23,6 @@ class OuterInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda",
     ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -38,7 +37,7 @@ class OuterInterpolatedAttnProcessor:
             size = 3
 
         self.size = size
-        self.coef = ts.to(torch_device)
+        self.coef = ts
         self.is_fused = is_fused
 
     def __call__(
@@ -126,6 +125,7 @@ class OuterInterpolatedAttnProcessor:
 
         # Apply outer interpolation on attention
         coef = self.coef.reshape(-1, 1, 1)
+        coef = coef.to(key.device, key.dtype)
         hidden_states = (1 - coef) * hidden_states_begin + coef * hidden_states_end
 
         hidden_states = attn.to_out[0](hidden_states)
@@ -161,7 +161,6 @@ class InnerInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        torch_device="cuda",
     ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -176,7 +175,7 @@ class InnerInterpolatedAttnProcessor:
             size = 3
 
         self.size = size
-        self.coef = ts.to(torch_device)
+        self.coef = ts
         self.is_fused = is_fused
 
     def __call__(
@@ -240,6 +239,7 @@ class InnerInterpolatedAttnProcessor:
 
         # Apply inner interpolation on attention
         coef = self.coef.reshape(-1, 1, 1)
+        coef = coef.to(key.device, key.dtype)
         key_cross = (1 - coef) * key_start + coef * key_end
         value_cross = (1 - coef) * value_start + coef * value_end
 

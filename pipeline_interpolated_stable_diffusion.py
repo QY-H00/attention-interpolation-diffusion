@@ -91,14 +91,14 @@ class InterpolationStableDiffusionPipeline:
         self.unet.to(*args, **kwargs)
 
     def generate_latent(
-        self, generator: Optional[torch.Generator] = None, torch_device: str = "cuda"
+        self, generator: Optional[torch.Generator] = None, torch_device: str = "cpu"
     ) -> torch.FloatTensor:
         """
         Generates a random latent tensor.
 
         Args:
             generator (Optional[torch.Generator], optional): Generator for random number generation. Defaults to None.
-            torch_device (str, optional): Device to store the tensor. Defaults to "cuda".
+            torch_device (str, optional): Device to store the tensor. Defaults to "cpu".
 
         Returns:
             torch.FloatTensor: Random latent tensor.
@@ -200,6 +200,7 @@ class InterpolationStableDiffusionPipeline:
             Numpy array of interpolated images, shape (size, H, W, 3)
         """
         # Specify alpha and beta
+        self.torch_device = self.unet.device
         if alpha is None:
             alpha = num_inference_steps
         if beta is None:
@@ -235,16 +236,28 @@ class InterpolationStableDiffusionPipeline:
 
         # Specify the interpolation methods
         pure_inner_attn_proc = InnerInterpolatedAttnProcessor(
-            size=size, is_fused=False, alpha=alpha, beta=beta
+            size=size,
+            is_fused=False,
+            alpha=alpha,
+            beta=beta,
         )
         fused_inner_attn_proc = InnerInterpolatedAttnProcessor(
-            size=size, is_fused=True, alpha=alpha, beta=beta
+            size=size,
+            is_fused=True,
+            alpha=alpha,
+            beta=beta,
         )
         pure_outer_attn_proc = OuterInterpolatedAttnProcessor(
-            size=size, is_fused=False, alpha=alpha, beta=beta
+            size=size,
+            is_fused=False,
+            alpha=alpha,
+            beta=beta,
         )
         fused_outer_attn_proc = OuterInterpolatedAttnProcessor(
-            size=size, is_fused=True, alpha=alpha, beta=beta
+            size=size,
+            is_fused=True,
+            alpha=alpha,
+            beta=beta,
         )
         self_attn_proc = AttnProcessor()
         procs_dict = {
@@ -332,6 +345,7 @@ class InterpolationStableDiffusionPipeline:
         Returns:
             Numpy array of interpolated images, shape (size, H, W, 3)
         """
+        self.torch_device = self.unet.device
         # Specify alpha and beta
         if alpha is None:
             alpha = num_inference_steps
@@ -414,6 +428,7 @@ class InterpolationStableDiffusionPipeline:
         Returns:
             numpy.ndarray: Sequence of generated images.
         """
+        self.torch_device = self.unet.device
         if guidance_scale is None:
             guidance_scale = self.guidance_scale
 
@@ -446,10 +461,22 @@ class InterpolationStableDiffusionPipeline:
         uncond_embs = torch.cat([uncond_emb_start, uncond_emb_t, uncond_emb_end], dim=0)
 
         # Specifiy the attention processors
-        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False)
-        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True)
-        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
-        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
+        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(
+            t=it,
+            is_fused=False,
+        )
+        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(
+            t=it,
+            is_fused=True,
+        )
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(
+            t=it,
+            is_fused=False,
+        )
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(
+            t=it,
+            is_fused=True,
+        )
         self_attn_proc = AttnProcessor()
         procs_dict = {
             "pure_inner": pure_inner_attn_proc,
