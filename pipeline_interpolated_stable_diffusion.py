@@ -32,27 +32,27 @@ class InterpolationStableDiffusionPipeline:
         self,
         repo_name: str = "CompVis/stable-diffusion-v1-4",
         scheduler_name: str = "ddim",
-        device: str = "cuda",
         frozen: bool = True,
         guidance_scale: float = 7.5,
         scheduler: Optional[SchedulerMixin] = None,
+        cache_dir: Optional[str] = None,
     ):
 
         # Initialize the generator
         self.vae = AutoencoderKL.from_pretrained(
-            repo_name, subfolder="vae", use_safetensors=True, cache_dir="weights"
+            repo_name, subfolder="vae", use_safetensors=True, cache_dir=cache_dir
         )
         self.tokenizer = CLIPTokenizer.from_pretrained(
-            repo_name, subfolder="tokenizer", cache_dir="weights"
+            repo_name, subfolder="tokenizer", cache_dir=cache_dir
         )
         self.text_encoder = CLIPTextModel.from_pretrained(
             repo_name,
             subfolder="text_encoder",
             use_safetensors=True,
-            cache_dir="weights",
+            cache_dir=cache_dir,
         )
         self.unet = UNet2DConditionModel.from_pretrained(
-            repo_name, subfolder="unet", use_safetensors=True, cache_dir="weights"
+            repo_name, subfolder="unet", use_safetensors=True, cache_dir=cache_dir
         )
 
         # Initialize the scheduler
@@ -60,11 +60,11 @@ class InterpolationStableDiffusionPipeline:
             self.scheduler = scheduler
         elif scheduler_name == "ddim":
             self.scheduler = DDIMScheduler.from_pretrained(
-                repo_name, subfolder="scheduler", cache_dir="weights"
+                repo_name, subfolder="scheduler", cache_dir=cache_dir
             )
         elif scheduler_name == "unipc":
             self.scheduler = UniPCMultistepScheduler.from_pretrained(
-                repo_name, subfolder="scheduler", cache_dir="weights"
+                repo_name, subfolder="scheduler", cache_dir=cache_dir
             )
         else:
             raise ValueError(
@@ -72,10 +72,7 @@ class InterpolationStableDiffusionPipeline:
             )
 
         # Setup device
-        self.torch_device = device
-        self.vae.to(self.torch_device)
-        self.text_encoder.to(self.torch_device)
-        self.unet.to(self.torch_device)
+
         self.guidance_scale = guidance_scale  # Scale for classifier-free guidance
 
         if frozen:
@@ -87,6 +84,11 @@ class InterpolationStableDiffusionPipeline:
 
             for param in self.vae.parameters():
                 param.requires_grad = False
+
+    def to(self, *args, **kwargs):
+        self.vae.to(*args, **kwargs)
+        self.text_encoder.to(*args, **kwargs)
+        self.unet.to(*args, **kwargs)
 
     def generate_latent(
         self, generator: Optional[torch.Generator] = None, torch_device: str = "cuda"
@@ -174,6 +176,7 @@ class InterpolationStableDiffusionPipeline:
         late: str = "self",
         alpha: Optional[float] = None,
         beta: Optional[float] = None,
+        guidance_scale: Optional[float] = None,
     ) -> np.ndarray:
         """
         Interpolate between two generation
@@ -192,7 +195,7 @@ class InterpolationStableDiffusionPipeline:
             late: str, late interpolation methods
             alpha: float, alpha parameter for beta distribution
             beta: float, beta parameter for beta distribution
-
+            guidance_scale: Optional[float], scale for classifier-free guidance
         Returns:
             Numpy array of interpolated images, shape (size, H, W, 3)
         """
@@ -201,7 +204,8 @@ class InterpolationStableDiffusionPipeline:
             alpha = num_inference_steps
         if beta is None:
             beta = num_inference_steps
-
+        if guidance_scale is None:
+            guidance_scale = self.guidance_scale
         self.scheduler.set_timesteps(num_inference_steps)
 
         # Prepare interpolated latents and embeddings
@@ -275,9 +279,7 @@ class InterpolationStableDiffusionPipeline:
                     latent_model_input, t, encoder_hidden_states=uncond_embs
                 ).sample
             # perform guidance
-            noise_pred = noise_uncond + self.guidance_scale * (
-                noise_pred - noise_uncond
-            )
+            noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
@@ -306,6 +308,7 @@ class InterpolationStableDiffusionPipeline:
         alpha: Optional[float] = None,
         beta: Optional[float] = None,
         init: str = "linear",
+        guidance_scale: Optional[float] = None,
     ) -> np.ndarray:
         """
         Interpolate between two generation
@@ -337,7 +340,7 @@ class InterpolationStableDiffusionPipeline:
         betas = generate_beta_tensor(size, alpha=alpha, beta=beta)
         final_images = None
 
-        # Generate interpoloated images one by one
+        # Generate interpolated images one by one
         for i in range(size - 2):
             it = betas[i + 1].item()
             if init == "denoising":
@@ -363,6 +366,7 @@ class InterpolationStableDiffusionPipeline:
                     late=late,
                     negative_prompt=negative_prompt,
                     init=init,
+                    guidance_scale=guidance_scale,
                 )
             if size == 3:
                 return images
@@ -388,6 +392,7 @@ class InterpolationStableDiffusionPipeline:
         early: str = "fused_outer",
         late: str = "self",
         init="linear",
+        guidance_scale: Optional[float] = None,
     ) -> np.ndarray:
         """
         Interpolates between two latent vectors and generates a sequence of images.
@@ -405,10 +410,13 @@ class InterpolationStableDiffusionPipeline:
             early (str, optional): Early attention processing method. Defaults to "fused_outer".
             late (str, optional): Late attention processing method. Defaults to "self".
             init (str, optional): Initialization method for interpolation. Defaults to "linear".
-
+            guidance_scale (Optional[float], optional): Scale for classifier-free guidance. Defaults to None.
         Returns:
             numpy.ndarray: Sequence of generated images.
         """
+        if guidance_scale is None:
+            guidance_scale = self.guidance_scale
+
         # Prepare interpolated inputs
         self.scheduler.set_timesteps(num_inference_steps)
 
@@ -474,9 +482,7 @@ class InterpolationStableDiffusionPipeline:
                     latent_model_input, t, encoder_hidden_states=uncond_embs
                 ).sample
             # perform guidance
-            noise_pred = noise_uncond + self.guidance_scale * (
-                noise_pred - noise_uncond
-            )
+            noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="asset/logo.png"  height=240>
+  <img src="asset/logo.png"  height=450>
 </p>
 
-### <div align="center">(P)AID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
+### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
 <div align="center">
 <a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b31b1b.svg?logo=arxiv></a>
@@ -32,7 +32,7 @@
 
 ## 📑 Abstract
 
-<b>TL; DR: <font color="red">AID</font> is a method that enables diffusion model to interpolate between two text prompts. Its variant, PAID, provides further control of the interpolation via prompt guidance.</b>
+<b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion)</b> is the first method that enables the text-to-image diffusion model to generate interpolation between different conditions with high consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of the interpolation via prompt guidance.
 
 ## ▶️ Play with PAID
 
@@ -76,7 +76,7 @@ SkyCraper -> Town
 
 Directly try PAID [here](https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing) using Google's Free GPU!
 
-## 🚗 Local Setup
+## 🚗 Local Setup using Jupyter Notebook
 
 1. Clone the repository and install the requirements:
 
@@ -87,6 +87,20 @@ pip install requirements.txt
 ```
 
 2. Go to `play.ipynb` for fun!
+
+## Local Setup using Gradio
+
+1. install Gradio
+
+``` bash
+pip install gradio
+```
+
+2. Launch the Gradio interface
+
+``` bash
+grad run gradio.py
+```
 
 ## 🎲 Customized Interpolation
 
@@ -142,9 +156,7 @@ Our method offers users customized and diverse configurations to experiment with
 
 #### 1. Inner
 
-
 #### 2. Outer
-
 
 ### Number of Warm-up steps
 
@@ -162,11 +174,11 @@ We support the following models:
 If you found this repository/our paper useful, please consider citing:
 
 ``` bibtex
-@article{,
-  title={},
-  author={},
+@article{he024paid,
+  title={PAID:(Prompt-guided) Attention Interpolation of Text-to-Image},
+  author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
   journal={},
-  year={}
+  year={2024}
 }
 ```
 
