@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <meta charset="utf-8">
+  <meta name="description" content="PAID: (Prompt-guided) Attention Interpolation of Text-to-Image">
+  <meta name="keywords"
+    content="Evaluation, Benchmark, Prompts, Dataset, Video Generation, Text-to-Video, Stable Diffusion, AIGC, Image Generation, MMLab, Shanghai AI Lab">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PAID: (Prompt-guided) Attention Interpolation of Text-to-Image</title>
+
+  <!--   Global site tag (gtag.js) - Google Analytics-->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-Y5ZVQZ7NHC"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-Y5ZVQZ7NHC');
+  </script>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+  <link rel="stylesheet" href="./assets/css/bulma.min.css">
+  <link rel="stylesheet" href="./assets/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./assets/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./assets/css/fontawesome.all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./assets/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./assets/vbench/js/fontawesome.all.min.js"></script>
+  <script src="./assets/vbench/js/bulma-carousel.min.js"></script>
+  <script src="./assets/vbench/js/bulma-slider.min.js"></script>
+  <script src="./assets/vbench/js/index.js"></script>
+</head>
+
+<body>
+
+  <!-- title -->
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/logo.png"
+                style="width:600px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+
+            <h1 class="title is-3 publication-title">PAID: (Prompt-guided) Attention
+              Interpolation of Text-to-Image</h1>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block">
+
+                <span class="author-block">
+                  <a href="https://qy-h00.github.io" target="_blank">He Qiyuan</a><sup>1</sup>,
+                </span>
+                <span class="author-block">
+                  <a href="https://king159.github.io/" target="_blank">Wang Jinghao</a><sup>2</sup>,
+                </span>
+                <span class="author-block">
+                  <a href="https://liuziwei7.github.io/" target="_blank">Liu Ziwei
+                  </a><sup>2</sup>,
+                </span>
+                <span class="author-block">
+                  <a href="https://github.com/zhangfan-p" target="_blank">Angela Yao</a><sup>1,&#8224</sup>
+                </span>
+            </div>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block">(&#8224 corresponding authors) </span>
+            </div>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block">
+                <sup>1</sup>
+                Computer Vision & Machine Learning Group, National University of Singapore
+              </span>
+              <span class="author-block">
+                <sup>2</sup>
+                S-Lab, Nanyang Technological University
+              </span>
+            </div>
+
+            <div class="column has-text-centered">
+              <div class="publication-links">
+                <!-- arXiv Link. -->
+                <span class="link-block">
+                  <a href="https://arxiv.org/abs/" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark" style="background-color: #B31B1B" ;>
+                    <span class="icon">
+                      <img src="assets/icon/arxiv.svg" />
+                    </span>
+                    <span>arXiv Paper</span>
+                  </a>
+                </span>
+                <!-- Google Colab Link. -->
+                <span class="link-block">
+                  <a href="https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing"
+                    class="external-link button is-normal is-rounded is-dark" style="background-color: #F9AB00;">
+                    <span class="icon">
+                      <img src="assets/icon/googlecolab.svg" />
+                    </span>
+                    <span>Google Colab</span>
+                  </a>
+                </span>
+                <!-- Github Repo Link. -->
+                <span class="link-block">
+                  <a href="https://github.com/QY-H00/attention-interpolation-diffusion" target="_blank"
+                    class="external-link button is-normal is-rounded">
+                    <span class="icon">
+                      <img src="assets/icon/github.svg" />
+                    </span>
+                    <span>GitHub Repo</span>
+                  </a>
+                </span>
+                <!-- Hugging Face Demo Link. -->
+                <span class="link-block">
+                  <a href="" target="_blank" class="external-link button is-normal is-rounded is-dark"
+                    style="background-color: blue;">
+                    <span class="icon">
+                      <img src="assets/icon/hf-logo.svg" style="display:block;width:330px;height:240px" />
+                    </span>
+                    <span>Hugging Face Space</span>
+                  </a>
+                </span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- teaser -->
+  <section class="hero teaser">
+    <div class="container is-max-desktop">
+      <div class="hero-body">
+        <img src="assets/images/pikachu_gundam.png" style="width:1000px; margin-bottom:10px" alt="Teaser." />
+        <p style="margin-top: 0;">
+          <b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion) </b> is the first method that
+          enables the text-to-image diffusion model to generate interpolation between different conditions with high
+          consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of
+          the interpolation via prompt guidance.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Abstract. -->
+  <section>
+    <div class="container is-max-desktop">
+      <div class="columns is-centered has-text-centered" style="margin-top: 10px; margin-bottom: 0px;">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3 is-centered">Abstract</h2>
+          <div class="content has-text-justified">
+            <p>
+              Conditional diffusion models can create unseen images in various settings, aiding image interpolation.
+              Interpolation in latent spaces is well-studied, but interpolation with specific conditions like text or
+              poses is less understood. Simple approaches, such as linear interpolation in the space of conditions,
+              often result in images that lack consistency, smoothness, and fidelity. To that end, we introduce a novel
+              training-free technique named <b>Attention Interpolation via Diffusion (AID)</b>. Our key contributions
+              include <b> 1)</b> proposing an inner/outer interpolated attention layer; <b>2)</b> fusing the
+              interpolated attention with self-attention to boost fidelity; and <b>3)</b> applying beta distribution
+              to selection to increase smoothness. We also present a variant, <b> Prompt-guided Attention Interpolation
+                via Diffusion (PAID)</b>, that considers interpolation as a condition-dependent generative process. This
+              method enables the creation of new images with greater consistency, smoothness, and efficiency, and offers
+              control over the exact path of interpolation. Our approach demonstrates effectiveness for conceptual and
+              spatial interpolation.
+            </p>
+          </div>
+        </div>
+      </div>
+  </section>
+  <!--/ Abstract. -->
+
+  <section class="section" style="margin-top:-50px; margin-bottom:-100px;">
+    <div class="container is-max-desktop">
+      <div class="hero-body">
+        <div class="section-title">
+          <h2 class="title is-3 is-centered">Method</h2>
+        </div>
+        <p style="margin-top: 0;">
+          We introduce <b>inner/outer interpolated attention</b> and fuse it with self-attention to compute the
+          interpolation
+          path between image generation with different conditions. We further select the specific interpolated images
+          with Beta distribution.
+        </p>
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/eq_1.png"
+                style="width:800px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+          </div>
+        </div>
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/eq_2.png"
+                style="width:800px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+          </div>
+        </div>
+        <p class="is-size-5" style="margin-top: -40px;text-align: center;margin-bottom: 70px;">
+          Equations for the inner/outer interpolated attention and the fusion with self-attention.
+        </p>
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/beta_selection.png"
+                style="width:900px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+          </div>
+        </div>
+        <p class="is-size-5" style="margin-top: -40px;text-align: center;margin-bottom: 70px;">
+          Effect of beta prior and the corresponding interpolation sequence
+          generated by AID.
+        </p>
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/ablation_on_fusion.png"
+                style="width:900px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+          </div>
+        </div>
+        <p class="is-size-5" style="margin-top: -40px;text-align: center;margin-bottom: 70px;">
+          Qualitative comparison between AID without fusion (1st row), AID
+          with fusion (2nd row) and AID with fusion and beta prior (3rd row).
+        </p>
+
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <div class="publication-img">
+              <img id="architecture" src="assets/images/paid.png"
+                style="width:600px; margin-top:10px;margin-bottom:10px;" />
+            </div>
+          </div>
+        </div>
+        <p class="is-size-5" style="margin-top: -40px;text-align: center;margin-bottom: 70px;">
+          Based on that, our method rethinks interpolation as a one-to-many task and introduces <b>prompt guidance</b>
+          to determine the specific interpolation sequence.
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Quantitative Results -->
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="section-title">
+        <h2 class="title is-3 is-centered">Quantitative Results</h2>
+      </div>
+    </div>
+  </div>
+
+  <section class="section" style="margin-top:0px; margin-bottom:0px;">
+    <div class="hero-body">
+
+      <div class="container is-max-desktop">
+        <div class="section-title">
+          <h2 class="title is-3">Qualitative Results</h2>
+        </div>
+        <div class="table-container" style="margin-top: 20px;">
+          <table class="table" id="RawTable">
+            <thead>
+              <tr>
+                <th>Dataset</th>
+                <th>Method</th>
+                <th>Smoothness (<span class="highlight">↑</span>)</th>
+                <th>Consistency (<span class="highlight">↓</span>)</th>
+                <th>Fidelity (<span class="highlight">↓</span>)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td rowspan="4" scope="col" style="vertical-align : middle;text-align: center;">CIFAR-10</td scope="col"
+                  style="text-align: center;">
+                <td scope="col" style="text-align: center;">Text Embedding Interpolation</td scope="col"
+                  style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">0.7531</font>
+                </td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.3645</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">118.05</font>
+                </td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">Denoising Interpolation</td scope="col"
+                  style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.7564</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">0.4295</font>
+                  </font>
+                </td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">87.13</td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">AID-O</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.7831</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.2905*</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">51.43*</td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">AID-I</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.7861*</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.3271</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">101.13</td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td rowspan="4" scope="col" style="vertical-align : middle;text-align: center;">LAION-Aesthetics</td
+                  scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">Text Embedding Interpolation</td scope="col"
+                  style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">0.7424</font>
+                </td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.3867</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">142.38</font>
+                </td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">Denoising Interpolation</td scope="col"
+                  style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.7511</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">
+                  <font color="red">0.4365</font>
+                </td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">101.31</td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">AID-O</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.7643</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.2944*</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">82.01*</td scope="col" style="text-align: center;">
+              </tr>
+              <tr>
+                <td scope="col" style="text-align: center;">AID-I</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.8152*</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">0.3787</td scope="col" style="text-align: center;">
+                <td scope="col" style="text-align: center;">129.41</td scope="col" style="text-align: center;">
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="is-size-6" style="margin-top: 0;">
+        Performance on CIFAR-10 and LAION-Aesthethics, where the best performance is marked as (*) and the worst is
+        marked as <font color="red">red</font>. AID-O and AID-I both show
+        significant improvement over the Text Embedding Interpolation. Though Denoising
+        Interpolation achieves relatively high fidelity, but trade-off with very bad performance
+        on consistency (0.4295). AID-O boosts the performance in terms of consistency and
+        fidelity while AID-I boosts the performance of smoothness.
+      </p>
+  </section>
+
+
+  <!-- HF -->
+  <section class="hero is-light" style="margin-top:0cqb; margin-bottom:0px;">
+    <div class="container is-max-desktop">
+      <div class="hero-body">
+        <div class="section-title">
+          <h2 class="title is-3 is-centered">Hugging Face Space</h2>
+        </div>
+        <div class="columns is-centered has-text-centered">
+          <div class="column">
+            <iframe src="" frameborder="0" width="1400" height="700"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BibTeX -->
+  <section class="hero is-small" id="BibTeX">
+    <div class="container is-max-desktop content" style="margin-top: 40px; margin-bottom: 20px;">
+      <h2 class="title">BibTeX</h2>
+      <p>If you find our work useful, please consider citing our paper:</p>
+      <pre><code>@article{he024paid,
+        title={PAID: (Prompt-guided) Attention Interpolation of Text-to-Image},
+        author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
+        journal={},
+        year={2024}
+      }</code></pre>
+    </div>
+  </section>
+
+  <!-- footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="columns is-centered">
+        <div class="column is-8">
+          <div class="content">
+            <p>
+              This website is licensed under a <a rel="license"
+                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
+                Commons Attribution-ShareAlike 4.0 International License</a>.
+            </p>
+            <p>
+              Website source code based on the <a href="https://nerfies.github.io/"> Nerfies</a> project page. If you
+              want to reuse their <a href="https://github.com/nerfies/nerfies.github.io">source code</a>, please credit
+              them appropriately.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+
+</html>
