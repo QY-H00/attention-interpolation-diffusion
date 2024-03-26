@@ -5,10 +5,10 @@
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
 <div align="center">
-<a><img herf=https://arxiv.org/abs/xxxx src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=25px></a>
-<a herf=https://huggingface.co/spaces/king159/PAID><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a>
-<a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-8f2628.svg?logo=googlecolab height=25px></a>
-<a herf=https://qy-h00.github.io/attention-interpolation-diffusion/><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=25px></a>
+<a href=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=25px></a>
+<a href=https://huggingface.co/spaces/king159/PAID><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a>
+<a href=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-8f2628.svg?logo=googlecolab height=25px></a>
+<a href=https://qy-h00.github.io/attention-interpolation-diffusion/><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=25px></a>
 </div>
 
 <p align="center">
