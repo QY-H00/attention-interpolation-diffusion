@@ -35,7 +35,7 @@ article = r"""
 If you found this demo/our paper useful, please consider citing:
 ```bibtex
 @article{he024paid,
-    title={PAID},
+    title={PAID:(Prompt-guided) Attention Interpolation of Text-to-Image Diffusion},
     author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
     journal={},
     year={2024}
@@ -155,6 +155,13 @@ def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
     return seed
 
 
+def dynamic_gallery_fn(interpolation_size: int):
+
+    return gr.Gallery(
+        label="Result", show_label=False, rows=1, columns=interpolation_size
+    )
+
+
 @torch.no_grad()
 def generate(
     prompt1: str,
@@ -215,29 +222,10 @@ def generate(
             final_images = np.concatenate([final_images, images[1:]], axis=0)
         else:
             final_images = np.concatenate([final_images, images[1:2]], axis=0)
-    # Save images
-    # for image in output:
-    #     user_history.save_image(
-    #         profile=profile,
-    #         image=image,
-    #         label=prompt1 + " " + prompt2,
-    #         metadata={
-    #             "negative_prompt": negative_prompt,
-    #             "seed": seed,
-    #             "width": width,
-    #             "height": height,
-    #             "prior_guidance_scale": prior_guidance_scale,
-    #             "decoder_num_inference_steps": decoder_num_inference_steps,
-    #             "decoder_guidance_scale": decoder_guidance_scale,
-    #             "interpolation_size": interpolation_size,
-    #         },
-    #     )
-    uuids = str(uuid.uuid4())
-    image_paths = [
-        save_image(img, uuids + f"{index}") for index, img in enumerate(final_images)
-    ]
-    return image_paths
+    return final_images
 
+
+interpolation_size = None
 
 with gr.Blocks() as demo:
     gr.Markdown(title)
@@ -255,16 +243,17 @@ with gr.Blocks() as demo:
             max_lines=3,
             placeholder="Enter the Second prompt",
             interactive=True,
-            value="A photo of cat, best quality, extremely detailed",
+            value="A photo of car, best quality, extremely detaile",
         )
-        result = gr.Gallery(label="Result", show_label=False, rows=1)
+        result = gr.Gallery(label="Result", show_label=False, rows=1, columns=3)
+
     with gr.Accordion("Advanced options", open=True):
         with gr.Group():
             with gr.Column():
                 interpolation_size = gr.Slider(
                     label="Interpolation Size",
                     minimum=3,
-                    maximum=20,
+                    maximum=15,
                     step=1,
                     value=3,
                     info="Interpolation size includes the start and end images",
@@ -293,6 +282,14 @@ with gr.Blocks() as demo:
                 tooltip=["coefficient", "interpolation index"],
                 interactive=False,
                 show_label=False,
+            )
+            gamma_plot.change(
+                plot_gemma_fn,
+                [
+                    gr.Number(4.0, visible=False),
+                    gr.Number(4.0, visible=False),
+                    gr.Number(3, visible=False),
+                ],
             )
         with gr.Group():
             guidance_prompt = gr.Text(
@@ -374,7 +371,7 @@ with gr.Blocks() as demo:
                     minimum=0,
                     maximum=MAX_SEED,
                     step=1,
-                    value=0,
+                    value=1002,
                 )
                 randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
                 same_latent = gr.Checkbox(
@@ -416,7 +413,11 @@ with gr.Blocks() as demo:
         fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
     )
     model_choice.change(fn=change_model_fn, inputs=[model_choice], outputs=None)
-
+    interpolation_size.change(
+        fn=dynamic_gallery_fn,
+        inputs=interpolation_size,
+        outputs=result,
+    )
     inputs = [
         prompt1,
         prompt2,
