@@ -285,7 +285,7 @@ class StableDiffusionMixin:
                 self.fusing_vae = False
 
 
-class InterpolatedStableDiffusionXLPipeline(
+class InterpolationStableDiffusionXLPipeline(
     DiffusionPipeline,
     StableDiffusionMixin,
     FromSingleFileMixin,
@@ -402,6 +402,35 @@ class InterpolatedStableDiffusionXLPipeline(
             self.watermark = StableDiffusionXLWatermarker()
         else:
             self.watermark = None
+
+    def generate_latent(
+        self, generator: Optional[torch.Generator] = None, torch_device: str = "cpu"
+    ) -> torch.FloatTensor:
+        """
+        Generates a random latent tensor.
+
+        Args:
+            generator (Optional[torch.Generator], optional): Generator for random number generation. Defaults to None.
+            torch_device (str, optional): Device to store the tensor. Defaults to "cpu".
+
+        Returns:
+            torch.FloatTensor: Random latent tensor.
+        """
+        channel = self.unet.config.in_channels
+        height = self.unet.config.sample_size
+        width = self.unet.config.sample_size
+        if generator is None:
+            latent = torch.randn(
+                (1, channel, height, width),
+                device=torch_device,
+            )
+        else:
+            latent = torch.randn(
+                (1, channel, height, width),
+                generator=generator,
+                device=torch_device,
+            )
+        return latent
 
     def encode_prompt(
         self,
@@ -1627,6 +1656,7 @@ class InterpolatedStableDiffusionXLPipeline(
         clip_skip: Optional[int] = None,
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
+        dtype: Optional[torch.dtype] = None,
         **kwargs,
     ):
         r"""
@@ -2058,18 +2088,10 @@ class InterpolatedStableDiffusionXLPipeline(
             ).to(device=device, dtype=latents.dtype)
 
         # 10. Prepare InterpolatedAttnProcessor
-        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(
-            t=it, is_fused=False, dtype=latents.dtype
-        )
-        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(
-            t=it, is_fused=True, dtype=latents.dtype
-        )
-        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(
-            t=it, is_fused=False, dtype=latents.dtype
-        )
-        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(
-            t=it, is_fused=True, dtype=latents.dtype
-        )
+        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False)
+        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True)
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
         self_attn_proc = AttnProcessor2_0()
         procs_dict = {
             "pure_inner": pure_inner_attn_proc,

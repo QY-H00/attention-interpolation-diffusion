@@ -5,10 +5,10 @@
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
 <div align="center">
-<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b31b1b.svg?logo=arxiv height=25px></a>
-<a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-0654ff.svg?logo=googlecolab height=25px></a>
-<a herf=><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-blue.svg height=25px>
-<a herf=https://qy-h00.github.io/attention-interpolation-diffusion/><img src= https://img.shields.io/badge/GitHub%20Project%20Page-181717.svg?logo=github height=25px>
+<a herf=https://arxiv.org/abs/xxxx><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=25px></a>
+<a herf=https://huggingface.co/spaces/king159/PAID><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px>
+<a herf=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing><img src= https://img.shields.io/badge/Google%20Colab-8f2628.svg?logo=googlecolab height=25px></a>
+<a herf=https://qy-h00.github.io/attention-interpolation-diffusion/><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=25px>
 </div>
 
 <p align="center">
@@ -34,42 +34,42 @@
 
 <b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion)</b> is the first method that enables the text-to-image diffusion model to generate interpolation between different conditions with high consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of the interpolation via prompt guidance.
 
-## ▶️ Play with PAID
-
-### Realist Style
+## ▶️ PAID Results
 
 <p align="center">
-Pikachu -> Gundam
-<img src="example/pikachu_gundam.png">
+<img src="sdxl_example/1.png">
 </p>
 
 <p align="center">
-Computer -> Phone
-<img src="example/computer_phone.png">
-</p>
-
-### Anime Style
-
-<p align="center">
-Ninja -> Cat
-<img src="example/ninja_cat.png">
+<img src="sdxl_example/2.png">
 </p>
 
 <p align="center">
-Ninja -> Dog
-<img src="example/ninja_dog.png">
-</p>
-
-### Oil-Painting Style
-
-<p align="center">
-Starry night -> Mona Lisas
-<img src="example/starry_mona.png">
+<img src="sdxl_example/3.png">
 </p>
 
 <p align="center">
-SkyCraper -> Town
-<img src="example/skycraper_town.png">
+<img src="sdxl_example/4.png">
+</p>
+
+<p align="center">
+<img src="sdxl_example/5.png">
+</p>
+
+<p align="center">
+<img src="sdxl_example/6.png">
+</p>
+
+<p align="center">
+<img src="sdxl_example/7.png">
+</p>
+
+<p align="center">
+<img src="sdxl_example/8.png">
+</p>
+
+<p align="center">
+<img src="sdxl_example/9.png">
 </p>
 
 ## 🏍️ Google Colab
@@ -86,9 +86,9 @@ cd attention-interpolation-diffusion
 pip install requirements.txt
 ```
 
-2. Go to `play.ipynb` for fun!
+2. Go to `play.ipynb` and `play_sdxl.ipynb` for fun!
 
-## Local Setup using Gradio
+## 🛳️ Local Setup using Gradio
 
 1. install Gradio
 
@@ -152,29 +152,22 @@ Our method offers users customized and diverse configurations to experiment with
 <img src="example/shark_fox_3.png">
 </p>
 
-### Inner/Outer Interpolated of Attention
-
-#### 1. Inner
-
-#### 2. Outer
-
-### Number of Warm-up steps
-
 ## 📝 Supporting Models
 
-We support the following models:
+| Model Name            |  Link                                             |
+|-----------------------|-------------------------------------------------------------|
+| Stable Diffusion 1.4-512  | [CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)   |
+| Stable Diffusion 1.5-512  | [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) |
+| Stable Diffusion 2.1-768  | [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1) |
+| Stable Diffusion XL-1024   | [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) |
+|Animagine XL 3.1 |   [cagliostrolab/animagine-xl-3.1](https://huggingface.co/cagliostrolab/animagine-xl-3.1)|
 
-- Stable Diffusion 1.4: [CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)
-- Stable Diffusion 1.5: [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5)
-- Stable Diffusion 2.1: [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1)
-- Stable Diffusion XL: [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-  
 ## ✒️Citation
 
 If you found this repository/our paper useful, please consider citing:
 
 ``` bibtex
-@article{he024paid,
+@article{he2024paid,
   title={PAID:(Prompt-guided) Attention Interpolation of Text-to-Image},
   author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
   journal={},
@@ -186,24 +179,40 @@ If you found this repository/our paper useful, please consider citing:
 
 We thank the following repositories for their great work: [diffusers](https://github.com/huggingface/diffusers), [transformers](https://github.com/huggingface/transformers).
 
-## ➕️ More Results
+## ➕️ More Results with SD1.5
 
-### Animals
+### Realist Style
 
 <p align="center">
-<img src="example/more_result_1.png">
+Pikachu -> Gundam
+<img src="example/pikachu_gundam.png">
 </p>
 
 <p align="center">
-<img src="example/more_result_2.png">
+Computer -> Phone
+<img src="example/computer_phone.png">
 </p>
 
-### Objects
+### Anime Style
 
 <p align="center">
-<img src="example/more_result_3.png">
+Ninja -> Cat
+<img src="example/ninja_cat.png">
 </p>
 
 <p align="center">
-<img src="example/more_result_4.png">
+Ninja -> Dog
+<img src="example/ninja_dog.png">
+</p>
+
+### Oil-Painting Style
+
+<p align="center">
+Starry night -> Mona Lisas
+<img src="example/starry_mona.png">
+</p>
+
+<p align="center">
+SkyCraper -> Town
+<img src="example/skycraper_town.png">
 </p>

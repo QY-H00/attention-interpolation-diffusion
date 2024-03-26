@@ -9,7 +9,7 @@ from diffusers import (
     UNet2DConditionModel,
     UniPCMultistepScheduler,
 )
-from diffusers.models.attention_processor import AttnProcessor
+from diffusers.models.attention_processor import AttnProcessor2_0
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
@@ -259,7 +259,7 @@ class InterpolationStableDiffusionPipeline:
             alpha=alpha,
             beta=beta,
         )
-        self_attn_proc = AttnProcessor()
+        self_attn_proc = AttnProcessor2_0()
         procs_dict = {
             "pure_inner": pure_inner_attn_proc,
             "fused_inner": fused_inner_attn_proc,

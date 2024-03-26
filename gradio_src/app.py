@@ -1,6 +1,4 @@
 import os
-import random
-import uuid
 from typing import Optional
 
 import gradio as gr
@@ -11,6 +9,7 @@ import user_history
 from PIL import Image
 from scipy.stats import beta as beta_distribution
 
+from pipeline_interpolated_sdxl import InterpolationStableDiffusionXLPipeline
 from pipeline_interpolated_stable_diffusion import InterpolationStableDiffusionPipeline
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -75,11 +74,13 @@ def change_model_fn(model_name: str) -> None:
             repo_name=name_mapping[model_name],
             guidance_scale=10.0,
             scheduler_name="unipc",
-        ).to(device, dtype=dtype)
+        )
+        pipeline.to(device, dtype=dtype)
     else:
-        pipeline = InterpolationStableDiffusionPipeline.from_pretrained(
-            name_mapping[model_name], torch_dtype=dtype
-        ).to(device, dtype=dtype)
+        pipeline = InterpolationStableDiffusionXLPipeline.from_pretrained(
+            name_mapping[model_name]
+        )
+        pipeline.to(device, dtype=dtype)
 
 
 def save_image(img, index):
@@ -98,7 +99,7 @@ def generate_beta_tensor(
 
 
 def plot_gemma_fn(alpha: float, beta: float, size: int) -> pd.DataFrame:
-    beta_ppf = generate_beta_tensor(size=size, alpha=alpha, beta=beta)
+    beta_ppf = generate_beta_tensor(size=size, alpha=int(alpha), beta=int(beta))
     return pd.DataFrame(
         {
             "interpolation index": [i for i in range(size)],
@@ -110,49 +111,24 @@ def plot_gemma_fn(alpha: float, beta: float, size: int) -> pd.DataFrame:
 def get_example() -> list:
     case = [
         [
-            "./examples/yann-lecun_resize.jpg",
-            None,
-            "a man",
-            "Spring Festival",
-            "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, (frame:1.2), deformed, ugly, deformed eyes, blur, out of focus, blurry, deformed cat, deformed, photo, anthropomorphic cat, monochrome, photo, pet collar, gun, weapon, blue, 3d, drones, drone, buildings in background, green",
-        ],
-        [
-            "./examples/musk_resize.jpeg",
-            "./examples/poses/pose2.jpg",
-            "a man flying in the sky in Mars",
-            "Mars",
-            "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, (frame:1.2), deformed, ugly, deformed eyes, blur, out of focus, blurry, deformed cat, deformed, photo, anthropomorphic cat, monochrome, photo, pet collar, gun, weapon, blue, 3d, drones, drone, buildings in background, green",
-        ],
-        [
-            "./examples/sam_resize.png",
-            "./examples/poses/pose4.jpg",
-            "a man doing a silly pose wearing a suite",
-            "Jungle",
-            "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, (frame:1.2), deformed, ugly, deformed eyes, blur, out of focus, blurry, deformed cat, deformed, photo, anthropomorphic cat, monochrome, photo, pet collar, gun, weapon, blue, 3d, drones, drone, buildings in background, gree",
-        ],
-        [
-            "./examples/schmidhuber_resize.png",
-            "./examples/poses/pose3.jpg",
-            "a man sit on a chair",
-            "Neon",
-            "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, (frame:1.2), deformed, ugly, deformed eyes, blur, out of focus, blurry, deformed cat, deformed, photo, anthropomorphic cat, monochrome, photo, pet collar, gun, weapon, blue, 3d, drones, drone, buildings in background, green",
-        ],
-        [
-            "./examples/kaifu_resize.png",
-            "./examples/poses/pose.jpg",
-            "a man",
-            "Vibrant Color",
-            "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, (frame:1.2), deformed, ugly, deformed eyes, blur, out of focus, blurry, deformed cat, deformed, photo, anthropomorphic cat, monochrome, photo, pet collar, gun, weapon, blue, 3d, drones, drone, buildings in background, green",
-        ],
+            "A photo of dog, best quality, extremely detailed",
+            "A photo of car, best quality, extremely detailed",
+            3,
+            6,
+            3,
+            "A photo of a dog driving a car, logical, best quality, extremely detailed",
+            "monochrome, lowres, bad anatomy, worst quality, low quality",
+            "SD1.5-512",
+            6.1 / 50,
+            10,
+            50,
+            "fused_inner",
+            "self",
+            1002,
+            True,
+        ]
     ]
     return case
-
-
-def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
-    print("randomizing seed")
-    if randomize_seed:
-        seed = random.randint(0, MAX_SEED)
-    return seed
 
 
 def dynamic_gallery_fn(interpolation_size: int):
@@ -179,9 +155,13 @@ def generate(
     same_latent: bool = True,
     num_inference_steps: int = 50,
     progress=gr.Progress(),
-):
+) -> np.ndarray:
     global pipeline
-    generator = torch.Generator().manual_seed(seed)
+    generator = (
+        torch.cuda.manual_seed(seed)
+        if torch.cuda.is_available()
+        else torch.manual_seed(seed)
+    )
     latent1 = pipeline.generate_latent(generator=generator)
     latent1 = latent1.to(device=pipeline.unet.device, dtype=pipeline.unet.dtype)
     if same_latent:
@@ -201,10 +181,10 @@ def generate(
         it = betas[i + 1].item()
         images = pipeline.interpolate_single(
             it,
-            latent1,
-            latent2,
-            prompt1,
-            prompt2,
+            latent_start=latent1,
+            latent_end=latent2,
+            prompt_start=prompt1,
+            prompt_end=prompt2,
             guide_prompt=guidance_prompt,
             num_inference_steps=num_inference_steps,
             warmup_ratio=warmup_ratio,
@@ -246,57 +226,60 @@ with gr.Blocks() as demo:
             value="A photo of car, best quality, extremely detaile",
         )
         result = gr.Gallery(label="Result", show_label=False, rows=1, columns=3)
-
+    generate_button = gr.Button("Generate", variant="primary")
     with gr.Accordion("Advanced options", open=True):
         with gr.Group():
-            with gr.Column():
-                interpolation_size = gr.Slider(
-                    label="Interpolation Size",
-                    minimum=3,
-                    maximum=15,
-                    step=1,
-                    value=3,
-                    info="Interpolation size includes the start and end images",
+            with gr.Row():
+                with gr.Column():
+                    interpolation_size = gr.Slider(
+                        label="Interpolation Size",
+                        minimum=3,
+                        maximum=15,
+                        step=1,
+                        value=3,
+                        info="Interpolation size includes the start and end images",
+                    )
+                    alpha = gr.Slider(
+                        label="alpha",
+                        minimum=1,
+                        maximum=50,
+                        step=0.1,
+                        value=6.0,
+                    )
+                    beta = gr.Slider(
+                        label="beta",
+                        minimum=1,
+                        maximum=50,
+                        step=0.1,
+                        value=3.0,
+                    )
+                gamma_plot = gr.LinePlot(
+                    x="interpolation index",
+                    y="coefficient",
+                    title="Beta Distribution with Sampled Points",
+                    height=500,
+                    width=400,
+                    overlay_point=True,
+                    tooltip=["coefficient", "interpolation index"],
+                    interactive=False,
+                    show_label=False,
                 )
-                alpha = gr.Slider(
-                    label="alpha",
-                    minimum=0,
-                    maximum=50,
-                    step=0.1,
-                    value=4.0,
+                gamma_plot.change(
+                    plot_gemma_fn,
+                    inputs=[
+                        alpha,
+                        beta,
+                        interpolation_size,
+                    ],
+                    outputs=gamma_plot,
                 )
-                beta = gr.Slider(
-                    label="beta",
-                    minimum=0,
-                    maximum=50,
-                    step=0.1,
-                    value=4.0,
-                )
-            gamma_plot = gr.LinePlot(
-                x="interpolation index",
-                y="coefficient",
-                title="Beta Distribution with Sampled Points",
-                height=400,
-                width=900,
-                overlay_point=True,
-                tooltip=["coefficient", "interpolation index"],
-                interactive=False,
-                show_label=False,
-            )
-            gamma_plot.change(
-                plot_gemma_fn,
-                [
-                    gr.Number(4.0, visible=False),
-                    gr.Number(4.0, visible=False),
-                    gr.Number(3, visible=False),
-                ],
-            )
         with gr.Group():
             guidance_prompt = gr.Text(
                 label="Guidance prompt",
                 max_lines=3,
                 placeholder="Enter a Guidance Prompt",
                 interactive=True,
+                value="A photo of a dog driving a car, logical, best quality, extremely detailed",
             )
             negative_prompt = gr.Text(
                 label="Negative prompt",
@@ -306,38 +289,23 @@ with gr.Blocks() as demo:
                 value="monochrome, lowres, bad anatomy, worst quality, low quality",
             )
         with gr.Row():
-            model_choice = gr.Dropdown(
-                ["SD1.4-521", "SD1.5-512", "SD2.1-768", "SDXL-1024"],
-                label="Model",
-                value="SD1.5-512",
-                interactive=True,
-            )
-        with gr.Row():
-            warmup_ratio = gr.Slider(
-                label="Warmup Ratio",
-                minimum=0.02,
-                maximum=1,
-                step=0.01,
-                value=0.16,
-                interactive=True,
-            )
-            guidance_scale = gr.Slider(
-                label="Guidance Scale",
-                minimum=0,
-                maximum=50,
-                step=0.1,
-                value=10,
-                interactive=True,
-            )
-        num_inference_steps = gr.Slider(
-            label="Inference Steps",
-            minimum=25,
-            maximum=50,
-            step=1,
-            value=50,
-            interactive=True,
-        )
-        with gr.Row():
+            with gr.Column():
+                warmup_ratio = gr.Slider(
+                    label="Warmup Ratio",
+                    minimum=0.02,
+                    maximum=1,
+                    step=0.01,
+                    value=0.122,
+                    interactive=True,
+                )
+                guidance_scale = gr.Slider(
+                    label="Guidance Scale",
+                    minimum=0,
+                    maximum=50,
+                    step=0.1,
+                    value=10,
+                    interactive=True,
+                )
             with gr.Column():
                 early = gr.Dropdown(
                     label="Early stage attention type",
@@ -365,6 +333,21 @@ with gr.Blocks() as demo:
                     type="value",
                     interactive=True,
                 )
+        num_inference_steps = gr.Slider(
+            label="Inference Steps",
+            minimum=25,
+            maximum=50,
+            step=1,
+            value=50,
+            interactive=True,
+        )
+        with gr.Row():
+            model_choice = gr.Dropdown(
+                ["SD1.4-521", "SD1.5-512", "SD2.1-768", "SDXL-1024"],
+                label="Model",
+                value="SD1.5-512",
+                interactive=True,
+            )
             with gr.Column():
                 seed = gr.Slider(
                     label="Seed",
@@ -373,30 +356,31 @@ with gr.Blocks() as demo:
                     step=1,
                     value=1002,
                 )
-                randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
                 same_latent = gr.Checkbox(
                     label="Same latent",
                     value=True,
                     info="Use the same latent for start and end images",
+                    show_label=True,
                 )
-    generate_button = gr.Button("Generate", variant="primary")
+
     gr.Examples(
         examples=get_example(),
         inputs=[
             prompt1,
             prompt2,
-            guidance_prompt,
-            negative_prompt,
-            warmup_ratio,
-            guidance_scale,
-            early,
-            late,
+            interpolation_size,
             alpha,
             beta,
-            interpolation_size,
+            guidance_prompt,
+            negative_prompt,
+            model_choice,
+            warmup_ratio,
+            guidance_scale,
+            num_inference_steps,
+            early,
+            late,
             seed,
             same_latent,
-            num_inference_steps,
         ],
         outputs=result,
         fn=generate,
@@ -412,12 +396,7 @@ with gr.Blocks() as demo:
     interpolation_size.change(
         fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
     )
-    model_choice.change(fn=change_model_fn, inputs=[model_choice], outputs=None)
-    interpolation_size.change(
-        fn=dynamic_gallery_fn,
-        inputs=interpolation_size,
-        outputs=result,
-    )
+    model_choice.change(fn=change_model_fn, inputs=model_choice)
     inputs = [
         prompt1,
         prompt2,
@@ -435,6 +414,10 @@ with gr.Blocks() as demo:
         num_inference_steps,
     ]
     generate_button.click(
+        fn=dynamic_gallery_fn,
+        inputs=interpolation_size,
+        outputs=result,
+    ).then(
         fn=generate,
         inputs=inputs,
         outputs=result,
@@ -444,8 +427,6 @@ with gr.Blocks() as demo:
 with gr.Blocks(css="style.css") as demo_with_history:
     with gr.Tab("App"):
         demo.render()
-    with gr.Tab("Past generations"):
-        user_history.render()
 
 if __name__ == "__main__":
     demo_with_history.queue(max_size=20).launch()
