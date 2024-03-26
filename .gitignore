@@ -1,0 +1,5 @@
+*.DS_Store
+deprecated/*
+shiyishi.*
+__pycache__/*
+.vscode/*
