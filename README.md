@@ -32,7 +32,7 @@
 
 ## 📑 Abstract
 
-<b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion)</b> is the first method that enables the text-to-image diffusion model to generate interpolation between different conditions with high consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of the interpolation via prompt guidance.
+<b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion)</b> is a method that enables the text-to-image diffusion model to generate interpolation between different conditions with high consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of the interpolation via prompt guidance.
 
 ## ▶️ PAID Results
 
