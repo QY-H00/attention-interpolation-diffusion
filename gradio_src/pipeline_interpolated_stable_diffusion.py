@@ -286,7 +286,7 @@ class InterpolationStableDiffusionPipeline:
                 noise_pred = self.unet(
                     latent_model_input, t, encoder_hidden_states=embs
                 ).sample
-                attn_proc = AttnProcessor()
+                attn_proc = AttnProcessor2_0()
                 self.unet.set_attn_processor(processor=attn_proc)
                 noise_uncond = self.unet(
                     latent_model_input, t, encoder_hidden_states=uncond_embs
@@ -477,7 +477,7 @@ class InterpolationStableDiffusionPipeline:
             t=it,
             is_fused=True,
         )
-        self_attn_proc = AttnProcessor()
+        self_attn_proc = AttnProcessor2_0()
         procs_dict = {
             "pure_inner": pure_inner_attn_proc,
             "fused_inner": fused_inner_attn_proc,
@@ -503,7 +503,7 @@ class InterpolationStableDiffusionPipeline:
                 noise_pred = self.unet(
                     latent_model_input, t, encoder_hidden_states=embs
                 ).sample
-                attn_proc = AttnProcessor()
+                attn_proc = AttnProcessor2_0()
                 self.unet.set_attn_processor(processor=attn_proc)
                 noise_uncond = self.unet(
                     latent_model_input, t, encoder_hidden_states=uncond_embs
@@ -544,7 +544,7 @@ class InterpolationStableDiffusionPipeline:
         Returns:
             numpy.ndarray: The interpolated images.
         """
-        self.unet.set_attn_processor(processor=AttnProcessor())
+        self.unet.set_attn_processor(processor=AttnProcessor2_0())
         start_emb = self.prompt_to_embedding(text_1)
         end_emb = self.prompt_to_embedding(text_2)
         neg_emb = self.prompt_to_embedding(negative_prompt)

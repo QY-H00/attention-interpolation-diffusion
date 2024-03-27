@@ -403,6 +403,12 @@ class InterpolationStableDiffusionXLPipeline(
         else:
             self.watermark = None
 
+    def to(self, *args, **kwargs):
+        super().to(*args, **kwargs)
+        self.vae.to(*args, **kwargs)
+        self.text_encoder.to(*args, **kwargs)
+        self.unet.to(*args, **kwargs)
+
     def generate_latent(
         self, generator: Optional[torch.Generator] = None, torch_device: str = "cpu"
     ) -> torch.FloatTensor:

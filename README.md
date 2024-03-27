@@ -86,9 +86,9 @@ cd attention-interpolation-diffusion
 pip install requirements.txt
 ```
 
-2. Go to `play.ipynb` and `play_sdxl.ipynb` for fun!
+2. Go to `play.ipynb` for fun!
 
-## 🛳️ Local Setup using Gradio
+<!-- ## 🛳️ Local Setup using Gradio
 
 1. install Gradio
 
@@ -100,7 +100,7 @@ pip install gradio
 
 ``` bash
 gradio gradio_src/app.py
-```
+``` -->
 
 ## 🎲 Customized Interpolation
 

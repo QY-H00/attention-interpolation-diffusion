@@ -5,7 +5,6 @@ import gradio as gr
 import numpy as np
 import pandas as pd
 import torch
-import user_history
 from PIL import Image
 from scipy.stats import beta as beta_distribution
 
@@ -33,11 +32,13 @@ article = r"""
 <br>
 If you found this demo/our paper useful, please consider citing:
 ```bibtex
-@article{he024paid,
-    title={PAID:(Prompt-guided) Attention Interpolation of Text-to-Image Diffusion},
-    author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
-    journal={},
-    year={2024}
+@misc{he2024aid,
+      title={AID: Attention Interpolation of Text-to-Image Diffusion}, 
+      author={Qiyuan He and Jinghao Wang and Ziwei Liu and Angela Yao},
+      year={2024},
+      eprint={2403.17924},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
 }
 ```
 📧 **Contact**
@@ -51,18 +52,17 @@ USE_TORCH_COMPILE = False
 ENABLE_CPU_OFFLOAD = os.getenv("ENABLE_CPU_OFFLOAD") == "1"
 PREVIEW_IMAGES = False
 
-dtype = torch.float32
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 pipeline = InterpolationStableDiffusionPipeline(
     repo_name="runwayml/stable-diffusion-v1-5",
     guidance_scale=10.0,
     scheduler_name="unipc",
 )
-pipeline.to(device, dtype=dtype)
+pipeline.to(device, dtype=torch.float32)
 
 
 def change_model_fn(model_name: str) -> None:
-    global pipeline
+    global device
     name_mapping = {
         "SD1.4-521": "CompVis/stable-diffusion-v1-4",
         "SD1.5-512": "runwayml/stable-diffusion-v1-5",
@@ -70,17 +70,21 @@ def change_model_fn(model_name: str) -> None:
         "SDXL-1024": "stabilityai/stable-diffusion-xl-base-1.0",
     }
     if "XL" not in model_name:
-        pipeline = InterpolationStableDiffusionPipeline(
+        globals()["pipeline"] = InterpolationStableDiffusionPipeline(
             repo_name=name_mapping[model_name],
             guidance_scale=10.0,
             scheduler_name="unipc",
         )
-        pipeline.to(device, dtype=dtype)
+        globals()["pipeline"].to(device, dtype=torch.float32)
     else:
-        pipeline = InterpolationStableDiffusionXLPipeline.from_pretrained(
-            name_mapping[model_name]
+        if device == torch.device("cpu"):
+            dtype = torch.float32
+        else:
+            dtype = torch.float16
+        globals()["pipeline"] = InterpolationStableDiffusionXLPipeline.from_pretrained(
+            name_mapping[model_name], torch_dtype=dtype
         )
-        pipeline.to(device, dtype=dtype)
+        globals()["pipeline"].to(device)
 
 
 def save_image(img, index):
@@ -108,7 +112,7 @@ def plot_gemma_fn(alpha: float, beta: float, size: int) -> pd.DataFrame:
     )
 
 
-def get_example() -> list:
+def get_example() -> list[list[str | float | int]]:
     case = [
         [
             "A photo of dog, best quality, extremely detailed",
@@ -116,7 +120,7 @@ def get_example() -> list:
             3,
             6,
             3,
-            "A photo of a dog driving a car, logical, best quality, extremely detailed",
+            "A car with dog furry texture, best quality, extremely detailed",
             "monochrome, lowres, bad anatomy, worst quality, low quality",
             "SD1.5-512",
             6.1 / 50,
@@ -126,9 +130,50 @@ def get_example() -> list:
             "self",
             1002,
             True,
-        ]
+        ],
+        [
+            "A photo of dog, best quality, extremely detailed",
+            "A photo of car, best quality, extremely detailed",
+            7,
+            8,
+            8,
+            "A toy named dog-car, best quality, extremely detailed",
+            "monochrome, lowres, bad anatomy, worst quality, low quality",
+            "SD1.5-512",
+            8.1 / 50,
+            10,
+            50,
+            "fused_inner",
+            "self",
+            1002,
+            True,
+        ],
+        [
+            "anime artwork a Pokemon called Pikachu sitting on the grass, dramatic, anime style, key visual, vibrant, studio anime, highly detailed",
+            "anime artwork a beautiful girl, dramatic, anime style, key visual, vibrant, studio anime, highly detailed",
+            7,
+            3,
+            3,
+            None,
+            "monochrome, lowres, bad anatomy, worst quality, low quality",
+            "SDXL-1024",
+            25 / 50,
+            10,
+            50,
+            "fused_outer",
+            "self",
+            1002,
+            False,
+        ],
     ]
     return case
+
+
+def change_generate_button_fn(enable: int) -> gr.Button:
+    if enable == 0:
+        return gr.Button(interactive=False, value="Switching Model...")
+    else:
+        return gr.Button(interactive=True, value="Generate")
 
 
 def dynamic_gallery_fn(interpolation_size: int):
@@ -193,6 +238,9 @@ def generate(
             negative_prompt=negative_prompt,
             guidance_scale=guidance_scale,
         )
+        if hasattr(images, "images"):
+            # for sdxl
+            images = np.array(images.images)
         if interpolation_size == 3:
             final_images = images
             break
@@ -207,7 +255,7 @@ def generate(
 
 interpolation_size = None
 
-with gr.Blocks() as demo:
+with gr.Blocks(css="style.css") as demo:
     gr.Markdown(title)
     gr.Markdown(description)
     with gr.Group():
@@ -226,7 +274,7 @@ with gr.Blocks() as demo:
             value="A photo of car, best quality, extremely detaile",
         )
         result = gr.Gallery(label="Result", show_label=False, rows=1, columns=3)
-    generate_button = gr.Button("Generate", variant="primary")
+    generate_button = gr.Button(value="Generate", variant="primary")
     with gr.Accordion("Advanced options", open=True):
         with gr.Group():
             with gr.Row():
@@ -243,14 +291,14 @@ with gr.Blocks() as demo:
                         label="alpha",
                         minimum=1,
                         maximum=50,
-                        step=0.1,
+                        step=1,
                         value=6.0,
                     )
                     beta = gr.Slider(
                         label="beta",
                         minimum=1,
                         maximum=50,
-                        step=0.1,
+                        step=1,
                         value=3.0,
                     )
                 gamma_plot = gr.LinePlot(
@@ -347,6 +395,7 @@ with gr.Blocks() as demo:
                 label="Model",
                 value="SD1.5-512",
                 interactive=True,
+                info="SDXL will run on float16 while the rest will run on float32.",
             )
             with gr.Column():
                 seed = gr.Slider(
@@ -382,8 +431,6 @@ with gr.Blocks() as demo:
             seed,
             same_latent,
         ],
-        outputs=result,
-        fn=generate,
         cache_examples=CACHE_EXAMPLES,
     )
 
@@ -396,7 +443,15 @@ with gr.Blocks() as demo:
     interpolation_size.change(
         fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
     )
-    model_choice.change(fn=change_model_fn, inputs=model_choice)
+    model_choice.change(
+        fn=change_generate_button_fn,
+        inputs=gr.Number(0, visible=False),
+        outputs=generate_button,
+    ).then(fn=change_model_fn, inputs=model_choice).then(
+        fn=change_generate_button_fn,
+        inputs=gr.Number(1, visible=False),
+        outputs=generate_button,
+    )
     inputs = [
         prompt1,
         prompt2,
@@ -424,9 +479,4 @@ with gr.Blocks() as demo:
     )
     gr.Markdown(article)
 
-with gr.Blocks(css="style.css") as demo_with_history:
-    with gr.Tab("App"):
-        demo.render()
-
-if __name__ == "__main__":
-    demo_with_history.queue(max_size=20).launch()
+demo.launch()
