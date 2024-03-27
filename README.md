@@ -167,11 +167,13 @@ Our method offers users customized and diverse configurations to experiment with
 If you found this repository/our paper useful, please consider citing:
 
 ``` bibtex
-@article{he2024paid,
-  title={PAID:(Prompt-guided) Attention Interpolation of Text-to-Image},
-  author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Angle, Yao},
-  journal={},
-  year={2024}
+@misc{he2024aid,
+      title={AID: Attention Interpolation of Text-to-Image Diffusion}, 
+      author={Qiyuan He and Jinghao Wang and Ziwei Liu and Angela Yao},
+      year={2024},
+      eprint={2403.17924},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
 }
 ```
 
