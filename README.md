@@ -7,7 +7,7 @@
 <div align="center">
 <a href=https://arxiv.org/abs/2403.17924 target="_blank"><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=25px></a>
 <a href=https://huggingface.co/spaces/king159/PAID target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a>
-<a href=https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing target="_blank"><img src= https://img.shields.io/badge/Google%20Colab-8f2628.svg?logo=googlecolab height=25px></a>
+<a href=https://colab.research.google.com/drive/1D2myS9UF241gx1otp-fy-LRakMZlROCT?usp=sharing target="_blank"><img src= https://img.shields.io/badge/Google%20Colab-8f2628.svg?logo=googlecolab height=25px></a>
 <a href=https://qy-h00.github.io/attention-interpolation-diffusion target="_blank"><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=25px></a>
 </div>
 
@@ -74,7 +74,7 @@
 
 ## 🏍️ Google Colab
 
-Directly try PAID [here](https://colab.research.google.com/drive/1zC-iOVu_raiFdUAD-TQ76GPKAuIj4hIt?usp=sharing) using Google's Free GPU!
+Directly try PAID with [Stable Diffusion 2.1](https://colab.research.google.com/drive/1qU62G-EkcGZKSL3QRfQZQZzRuqaF94sB?usp=sharing) or [SDXL](https://colab.research.google.com/drive/1D2myS9UF241gx1otp-fy-LRakMZlROCT?usp=sharing) using Google's Free GPU!
 
 ## 🚗 Local Setup using Jupyter Notebook
 
@@ -86,7 +86,7 @@ cd attention-interpolation-diffusion
 pip install requirements.txt
 ```
 
-2. Go to `play.ipynb` for fun!
+2. Go to `play.ipynb` or `play_sdxl.ipynb` for fun!
 
 ## 🛳️ Local Setup using Gradio
 
