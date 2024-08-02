@@ -24,7 +24,8 @@ class OuterInterpolatedAttnProcessor:
         alpha: float = 1,
         beta: float = 1,
         torch_device="cuda",
-        dtype=torch.float32
+        dtype=torch.float32,
+        intp="linear"
         ):
         '''
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -41,6 +42,7 @@ class OuterInterpolatedAttnProcessor:
         self.size = size
         self.coef = ts.to(torch_device)
         self.is_fused = is_fused
+        self.intp = intp
 
     def __call__(
         self,
@@ -48,7 +50,7 @@ class OuterInterpolatedAttnProcessor:
         hidden_states: torch.FloatTensor,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        temb: Optional[torch.FloatTensor] = None,
+        temb: Optional[torch.FloatTensor] = None
     ) -> torch.Tensor:
         residual = hidden_states
 
@@ -126,8 +128,18 @@ class OuterInterpolatedAttnProcessor:
         hidden_states_begin = attn.batch_to_head_dim(hidden_states_begin)
 
         # Apply outer interpolation on attention
-        coef = self.coef.reshape(-1, 1, 1)
-        hidden_states = (1 - coef) * hidden_states_begin + coef * hidden_states_end
+
+        if self.intp == "linear":
+            coef = self.coef.reshape(-1, 1, 1)
+            hidden_states = (1 - coef) * hidden_states_begin + coef * hidden_states_end
+        elif self.intp == "sphere":
+            hidden_states = []
+            for i in range(hidden_states_begin.shape[0]):
+                current_state = slerp(hidden_states_begin[i:i+1], hidden_states_end[i:i+1], self.coef[i])
+                hidden_states.append(current_state)
+            hidden_states = torch.cat(hidden_states, dim=0)
+        else:
+            assert False
 
         hidden_states = attn.to_out[0](hidden_states)
         hidden_states = attn.to_out[1](hidden_states)
@@ -163,7 +175,8 @@ class InnerInterpolatedAttnProcessor:
         alpha: float = 1,
         beta: float = 1,
         torch_device="cuda",
-        dtype=torch.float32
+        dtype=torch.float32,
+        intp="linear"
         ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -180,6 +193,7 @@ class InnerInterpolatedAttnProcessor:
         self.size = size
         self.coef = ts.to(torch_device)
         self.is_fused = is_fused
+        self.intp = intp
 
     def __call__(
         self,
@@ -241,9 +255,21 @@ class InnerInterpolatedAttnProcessor:
         value_end = torch.cat([value_end] * (self.size))
 
         # Apply inner interpolation on attention
-        coef = self.coef.reshape(-1, 1, 1)
-        key_cross = (1 - coef) * key_start + coef * key_end
-        value_cross = (1 - coef) * value_start + coef * value_end
+        if self.intp == "linear":
+            coef = self.coef.reshape(-1, 1, 1)
+            key_cross = (1 - coef) * key_start + coef * key_end
+            value_cross = (1 - coef) * value_start + coef * value_end
+        elif self.intp == "sphere":
+            key_cross = []
+            for i in range(key_start.shape[0]):
+                current_key = slerp(key_start[i:i+1], key_end[i:i+1], self.coef[i])
+                key_cross.append(current_key)
+            key_cross = torch.cat(key_cross, dim=0)
+            value_cross = []
+            for i in range(value_start.shape[0]):
+                current_value = slerp(value_start[i:i+1], value_end[i:i+1], self.coef[i])
+                value_cross.append(current_value)
+            value_cross = torch.cat(value_cross, dim=0)
 
         key_cross = attn.head_to_batch_dim(key_cross)
         value_cross = attn.head_to_batch_dim(value_cross)
@@ -343,6 +369,11 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
     """
     assert v0.shape == v1.shape, "shapes of v0 and v1 must match"
 
+    # flatten
+    shape = v0.shape
+    v0 = v0.reshape(shape[0], -1)
+    v1 = v1.reshape(shape[0], -1)
+
     # Normalize the vectors to get the directions and angles
     v0_norm: FloatTensor = torch.norm(v0, dim=-1)
     v1_norm: FloatTensor = torch.norm(v1, dim=-1)
@@ -387,4 +418,6 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
 
         out: FloatTensor = slerped.where(can_slerp.unsqueeze(-1), out)
 
+    # reshape back
+    out = out.reshape(*shape)
     return out

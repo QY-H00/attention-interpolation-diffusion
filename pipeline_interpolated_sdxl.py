@@ -1398,7 +1398,9 @@ class InterpolatedStableDiffusionXLPipeline(
         latent_start: Optional[torch.FloatTensor] = None,
         latent_end: Optional[torch.FloatTensor] = None,
         guide_prompt: Optional[str] = None,
+        guide_magnitude: float = 0.5,
         warmup_ratio: float = 0.5,
+        intp: str = "linear",
         early: str = "fused_outer",
         late: str = "self",
         init: str = "linear",
@@ -1684,7 +1686,7 @@ class InterpolatedStableDiffusionXLPipeline(
                 pooled_prompt_embeds_target,
                 negative_pooled_prompt_embeds_target,
             ) = self.encode_prompt(
-                prompt=prompt_start,
+                prompt=guide_prompt,
                 prompt_2=prompt_2,
                 device=device,
                 num_images_per_prompt=num_images_per_prompt,
@@ -1743,6 +1745,16 @@ class InterpolatedStableDiffusionXLPipeline(
         )
         
         latent_target = slerp(latent_start, latent_end, it)
+        # latent_target = self.prepare_latents(
+        #     1,
+        #     num_channels_latents,
+        #     height,
+        #     width,
+        #     prompt_embeds.dtype,
+        #     device,
+        #     generator,
+        #     None,
+        # )
         latents = torch.cat([latent_start, latent_target, latent_end], dim=0).to(device=device)
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
@@ -1813,10 +1825,10 @@ class InterpolatedStableDiffusionXLPipeline(
             ).to(device=device, dtype=latents.dtype)
 
         # 10. Prepare InterpolatedAttnProcessor
-        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False, dtype=latents.dtype)
-        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True, dtype=latents.dtype)
-        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False, dtype=latents.dtype)
-        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True, dtype=latents.dtype)
+        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False, dtype=latents.dtype, intp=intp)
+        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True, dtype=latents.dtype, intp=intp)
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False, dtype=latents.dtype, intp=intp)
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True, dtype=latents.dtype, intp=intp)
         self_attn_proc = AttnProcessor2_0()
         procs_dict = {
             'pure_inner': pure_inner_attn_proc,
