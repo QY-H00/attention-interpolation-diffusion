@@ -26,13 +26,21 @@
   <sup>&#x2709;</sup> Corresponding Author
 </p>
 
-## 📌 Release
+<p align="center">
+NeurIPS2024 Poster
+</p>
 
+## 📌 Release
+[10/2024] PAID is accepted by NeurIPS 2024 (Poster)!
 [03/2024] Code and paper are publicly available.
 
 ## 📑 Abstract
 
 <b>TL;DR: <font color="red">AID</font> (Attention Interpolation via Diffusion)</b> is a training-free method that enables the text-to-image diffusion model to generate interpolation between different conditions with high consistency, smoothness and fidelity. Its variant, <font color="blue">PAID</font>, provides further control of the interpolation via prompt guidance.
+
+<details><summary>CLICK for the full abstract</summary>
+Conditional diffusion models can create unseen images in various settings, aiding image interpolation. Interpolation in latent spaces is well-studied, but interpolation with specific conditions like text or poses is less understood. Simple approaches, such as linear interpolation in the space of conditions, often result in images that lack consistency, smoothness, and fidelity. To that end, we introduce a novel training-free technique named Attention Interpolation via Diffusion (AID). Our key contributions include 1) proposing an inner/outer interpolated attention layer; 2) fusing the interpolated attention with self-attention to boost fidelity; and 3) applying beta distribution to selection to increase smoothness. We also present a variant, Prompt-guided Attention Interpolation via Diffusion (PAID), that considers interpolation as a condition-dependent generative process. This method enables the creation of new images with greater consistency, smoothness, and efficiency, and offers control over the exact path of interpolation. Our approach demonstrates effectiveness for conceptual and spatial interpolation.
+</details>
 
 ## ▶️ PAID Results
 
