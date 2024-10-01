@@ -5,7 +5,7 @@
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
 <p align="center">
-Accepted in NeurIPS 2024
+NeurIPS 2024 Paper
 </p>
 
 <div align="center">
@@ -32,6 +32,7 @@ Accepted in NeurIPS 2024
 
 ## 📌 Release
 [10/2024] PAID is accepted by NeurIPS 2024 (Poster)!
+
 [03/2024] Code and paper are publicly available.
 
 ## 📑 Abstract
