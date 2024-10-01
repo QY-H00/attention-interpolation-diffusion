@@ -4,6 +4,10 @@
 
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
 
+<p align="center">
+Accepted in NeurIPS 2024
+</p>
+
 <div align="center">
 <a href=https://arxiv.org/abs/2403.17924 target="_blank"><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=25px></a>
 <a href=https://huggingface.co/spaces/king159/PAID target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a>
@@ -24,10 +28,6 @@
   S-Lab, Nanyang Technological University <sup>2</sup>
   <br>
   <sup>&#x2709;</sup> Corresponding Author
-</p>
-
-<p align="center">
-NeurIPS2024 Poster
 </p>
 
 ## 📌 Release
