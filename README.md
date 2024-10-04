@@ -31,7 +31,9 @@ NeurIPS 2024 Paper
 </p>
 
 ## 📌 Release
-[10/2024] PAID is accepted by NeurIPS 2024 (Poster)!
+[10/2024] We are now supporting interpolating between images via IP-Adapter.
+
+[10/2024] PAID is accepted as a conference paper by NeurIPS 2024!
 
 [03/2024] Code and paper are publicly available.
 
