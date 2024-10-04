@@ -1908,7 +1908,7 @@ class InterpolationStableDiffusionXLPipeline(
                 pooled_prompt_embeds_target,
                 negative_pooled_prompt_embeds_target,
             ) = self.encode_prompt(
-                prompt=prompt_start,
+                prompt=guide_prompt,
                 prompt_2=prompt_2,
                 device=device,
                 num_images_per_prompt=num_images_per_prompt,
