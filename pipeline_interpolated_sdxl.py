@@ -25,7 +25,6 @@ from diffusers.loaders import (
 )
 from diffusers.models import AutoencoderKL, ImageProjection, UNet2DConditionModel
 from diffusers.models.attention_processor import (
-    IPAdapterAttnProcessor,
     AttnProcessor2_0,
     FusedAttnProcessor2_0,
     LoRAAttnProcessor2_0,
@@ -60,7 +59,6 @@ from transformers import (
 from interpolation import (
     InnerInterpolatedAttnProcessor,
     OuterInterpolatedAttnProcessor,
-    OuterInterpolatedIPAttnProcessor,
     slerp,
 )
 
@@ -1620,8 +1618,6 @@ class InterpolationStableDiffusionXLPipeline(
         prompt_end: Optional[str] = None,
         latent_start: Optional[torch.FloatTensor] = None,
         latent_end: Optional[torch.FloatTensor] = None,
-        image_start: Optional[PipelineImageInput] = None,
-        image_end: Optional[PipelineImageInput] = None,
         guide_prompt: Optional[str] = None,
         warmup_ratio: float = 0.5,
         early: str = "fused_outer",
@@ -1912,7 +1908,7 @@ class InterpolationStableDiffusionXLPipeline(
                 pooled_prompt_embeds_target,
                 negative_pooled_prompt_embeds_target,
             ) = self.encode_prompt(
-                prompt=guide_prompt,
+                prompt=prompt_start,
                 prompt_2=prompt_2,
                 device=device,
                 num_images_per_prompt=num_images_per_prompt,
@@ -2057,49 +2053,6 @@ class InterpolationStableDiffusionXLPipeline(
                 3,
                 self.do_classifier_free_guidance,
             )
-        
-        if image_start is not None:
-            image_embeds_start = self.prepare_ip_adapter_image_embeds(
-                image_start,
-                None,
-                device,
-                3,
-                self.do_classifier_free_guidance,
-            )
-
-        if image_end is not None:
-            image_embeds_end = self.prepare_ip_adapter_image_embeds(
-                image_end,
-                None,
-                device,
-                3,
-                self.do_classifier_free_guidance,
-            )
-
-        negative_image_embeds_start, image_embeds_start = image_embeds_start[0].chunk(2)
-        negative_image_embeds_end, image_embeds_end = image_embeds_end[0].chunk(2)
-
-        if init == "linear":
-            image_embeds_target = torch.lerp(image_embeds_start, image_embeds_end, it)
-            negative_image_embeds_target = torch.lerp(
-                negative_image_embeds_start, negative_image_embeds_end, it
-            )
-        else:
-            image_embeds_target = slerp(image_embeds_start, image_embeds_end, it)
-            negative_image_embeds_target = slerp(
-                negative_image_embeds_start, negative_image_embeds_end, it
-            )
-
-        image_embeds = torch.cat(
-            [image_embeds_start, image_embeds_target, image_embeds_end], dim=0
-        ).to(device=device)
-
-        negative_image_embeds = torch.cat(
-            [negative_image_embeds_start, negative_image_embeds_target, negative_image_embeds_end], dim=0
-        ).to(device=device)
-
-        # image_embeds = [image_embeds]
-        # negative_image_embeds =[negative_image_embeds]
 
         # 8. Denoising loop
         num_warmup_steps = max(
@@ -2136,14 +2089,8 @@ class InterpolationStableDiffusionXLPipeline(
         # 10. Prepare InterpolatedAttnProcessor
         pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False)
         fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True)
-        if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-            pure_outer_attn_proc = OuterInterpolatedIPAttnProcessor(t=it, is_fused=False)
-        else:
-            pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
-        if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-            fused_outer_attn_proc = OuterInterpolatedIPAttnProcessor(t=it, is_fused=True)
-        else:
-            fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
+        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
+        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
         self_attn_proc = AttnProcessor2_0()
         procs_dict = {
             "pure_inner": pure_inner_attn_proc,
@@ -2189,7 +2136,7 @@ class InterpolationStableDiffusionXLPipeline(
                     "text_embeds": pooled_prompt_embeds,
                     "time_ids": add_time_ids,
                 }
-                if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
+                if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
                     added_cond_kwargs["image_embeds"] = image_embeds
                 noise_pred_text = self.unet(
                     latent_model_input,
@@ -2201,17 +2148,16 @@ class InterpolationStableDiffusionXLPipeline(
                     return_dict=False,
                 )[0]
 
-                # Set back to usual attention processor, if using image_embed, dont do this
-                if image_embeds is None:
-                    attn_proc = AttnProcessor2_0()
+                # Set back to usual attention processor
+                attn_proc = AttnProcessor2_0()
                 self.unet.set_attn_processor(processor=attn_proc)
                 # predict the noise residual for negative noise
                 added_cond_kwargs = {
                     "text_embeds": negative_pooled_prompt_embeds,
                     "time_ids": negative_add_time_ids,
                 }
-                if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-                    added_cond_kwargs["image_embeds"] = negative_image_embeds
+                if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
+                    added_cond_kwargs["image_embeds"] = image_embeds
                 noise_pred_uncond = self.unet(
                     latent_model_input,
                     t,

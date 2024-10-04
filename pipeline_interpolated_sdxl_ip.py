@@ -25,7 +25,6 @@ from diffusers.loaders import (
 )
 from diffusers.models import AutoencoderKL, ImageProjection, UNet2DConditionModel
 from diffusers.models.attention_processor import (
-    IPAdapterAttnProcessor,
     AttnProcessor2_0,
     FusedAttnProcessor2_0,
     LoRAAttnProcessor2_0,
@@ -58,8 +57,6 @@ from transformers import (
 )
 
 from interpolation import (
-    InnerInterpolatedAttnProcessor,
-    OuterInterpolatedAttnProcessor,
     OuterInterpolatedIPAttnProcessor,
     slerp,
 )
