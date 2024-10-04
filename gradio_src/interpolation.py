@@ -57,23 +57,15 @@ class OuterInterpolatedAttnProcessor:
 
         if input_ndim == 4:
             batch_size, channel, height, width = hidden_states.shape
-            hidden_states = hidden_states.view(
-                batch_size, channel, height * width
-            ).transpose(1, 2)
+            hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
 
         batch_size, sequence_length, _ = (
-            hidden_states.shape
-            if encoder_hidden_states is None
-            else encoder_hidden_states.shape
+            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
         )
-        attention_mask = attn.prepare_attention_mask(
-            attention_mask, sequence_length, batch_size
-        )
+        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
 
         if attn.group_norm is not None:
-            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(
-                1, 2
-            )
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         query = attn.to_q(hidden_states)
         query = attn.head_to_batch_dim(query)
@@ -81,9 +73,7 @@ class OuterInterpolatedAttnProcessor:
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
         elif attn.norm_cross:
-            encoder_hidden_states = attn.norm_encoder_hidden_states(
-                encoder_hidden_states
-            )
+            encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
 
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
@@ -117,9 +107,7 @@ class OuterInterpolatedAttnProcessor:
         hidden_states_end = torch.bmm(attention_probs_end, value_end)
         hidden_states_end = attn.batch_to_head_dim(hidden_states_end)
 
-        attention_probs_begin = attn.get_attention_scores(
-            query, key_begin, attention_mask
-        )
+        attention_probs_begin = attn.get_attention_scores(query, key_begin, attention_mask)
         hidden_states_begin = torch.bmm(attention_probs_begin, value_begin)
         hidden_states_begin = attn.batch_to_head_dim(hidden_states_begin)
 
@@ -132,9 +120,7 @@ class OuterInterpolatedAttnProcessor:
         hidden_states = attn.to_out[1](hidden_states)
 
         if input_ndim == 4:
-            hidden_states = hidden_states.transpose(-1, -2).reshape(
-                batch_size, channel, height, width
-            )
+            hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
 
         if attn.residual_connection:
             hidden_states = hidden_states + residual
@@ -195,23 +181,15 @@ class InnerInterpolatedAttnProcessor:
 
         if input_ndim == 4:
             batch_size, channel, height, width = hidden_states.shape
-            hidden_states = hidden_states.view(
-                batch_size, channel, height * width
-            ).transpose(1, 2)
+            hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
 
         batch_size, sequence_length, _ = (
-            hidden_states.shape
-            if encoder_hidden_states is None
-            else encoder_hidden_states.shape
+            hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
         )
-        attention_mask = attn.prepare_attention_mask(
-            attention_mask, sequence_length, batch_size
-        )
+        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
 
         if attn.group_norm is not None:
-            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(
-                1, 2
-            )
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         query = attn.to_q(hidden_states)
         query = attn.head_to_batch_dim(query)
@@ -219,9 +197,7 @@ class InnerInterpolatedAttnProcessor:
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
         elif attn.norm_cross:
-            encoder_hidden_states = attn.norm_encoder_hidden_states(
-                encoder_hidden_states
-            )
+            encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
 
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
@@ -261,9 +237,7 @@ class InnerInterpolatedAttnProcessor:
         hidden_states = attn.to_out[1](hidden_states)
 
         if input_ndim == 4:
-            hidden_states = hidden_states.transpose(-1, -2).reshape(
-                batch_size, channel, height, width
-            )
+            hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
 
         if attn.residual_connection:
             hidden_states = hidden_states + residual
@@ -358,9 +332,7 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
     can_slerp: LongTensor = ~gotta_lerp
 
     t_batch_dim_count: int = max(0, t.dim() - v0.dim()) if isinstance(t, Tensor) else 0
-    t_batch_dims: Size = (
-        t.shape[:t_batch_dim_count] if isinstance(t, Tensor) else Size([])
-    )
+    t_batch_dims: Size = t.shape[:t_batch_dim_count] if isinstance(t, Tensor) else Size([])
     out: FloatTensor = torch.zeros_like(v0.expand(*t_batch_dims, *[-1] * v0.dim()))
 
     # if no elements are lerpable, our vectors become 0-dimensional, preventing broadcasting
@@ -371,7 +343,6 @@ def slerp(v0: FloatTensor, v1: FloatTensor, t, threshold=0.9995):
 
     # if no elements are slerpable, our vectors become 0-dimensional, preventing broadcasting
     if can_slerp.any():
-
         # Calculate initial angle between v0 and v1
         theta_0: FloatTensor = dot.arccos().unsqueeze(-1)
         sin_theta_0: FloatTensor = theta_0.sin()

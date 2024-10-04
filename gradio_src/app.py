@@ -11,6 +11,7 @@ from scipy.stats import beta as beta_distribution
 from pipeline_interpolated_sdxl import InterpolationStableDiffusionXLPipeline
 from pipeline_interpolated_stable_diffusion import InterpolationStableDiffusionPipeline
 
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 title = r"""
@@ -20,7 +21,7 @@ title = r"""
 description = r"""
 <b>Official 🤗 Gradio demo</b> for <a href='https://github.com/QY-H00/attention-interpolation-diffusion/tree/public' target='_blank'><b>PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion</b></a>.<br>
 How to use:<br>
-1. Input prompt 1 and prompt 2. 
+1. Input prompt 1 and prompt 2.
 2. (Optional) Input the guidance prompt and negative prompt.
 3. (Optional) Change the interpolation parameters and check the Beta distribution.
 4. Click the <b>Generate</b> button to begin generating images.
@@ -33,7 +34,7 @@ article = r"""
 If you found this demo/our paper useful, please consider citing:
 ```bibtex
 @misc{he2024aid,
-      title={AID: Attention Interpolation of Text-to-Image Diffusion}, 
+      title={AID: Attention Interpolation of Text-to-Image Diffusion},
       author={Qiyuan He and Jinghao Wang and Ziwei Liu and Angela Yao},
       year={2024},
       eprint={2403.17924},
@@ -65,7 +66,6 @@ def change_model_fn(model_name: str) -> None:
     global device
     name_mapping = {
         "SD1.4-521": "CompVis/stable-diffusion-v1-4",
-        "SD1.5-512": "runwayml/stable-diffusion-v1-5",
         "SD2.1-768": "stabilityai/stable-diffusion-2-1",
         "SDXL-1024": "stabilityai/stable-diffusion-xl-base-1.0",
     }
@@ -94,9 +94,7 @@ def save_image(img, index):
     return unique_name
 
 
-def generate_beta_tensor(
-    size: int, alpha: float = 3.0, beta: float = 3.0
-) -> torch.FloatTensor:
+def generate_beta_tensor(size: int, alpha: float = 3.0, beta: float = 3.0) -> torch.FloatTensor:
     prob_values = [i / (size - 1) for i in range(size)]
     inverse_cdf_values = beta_distribution.ppf(prob_values, alpha, beta)
     return inverse_cdf_values
@@ -106,7 +104,7 @@ def plot_gemma_fn(alpha: float, beta: float, size: int) -> pd.DataFrame:
     beta_ppf = generate_beta_tensor(size=size, alpha=int(alpha), beta=int(beta))
     return pd.DataFrame(
         {
-            "interpolation index": [i for i in range(size)],
+            "interpolation index": list(range(size)),
             "coefficient": beta_ppf.tolist(),
         }
     )
@@ -194,10 +192,7 @@ def change_generate_button_fn(enable: int) -> gr.Button:
 
 
 def dynamic_gallery_fn(interpolation_size: int):
-
-    return gr.Gallery(
-        label="Result", show_label=False, rows=1, columns=interpolation_size
-    )
+    return gr.Gallery(label="Result", show_label=False, rows=1, columns=interpolation_size)
 
 
 @torch.no_grad()
@@ -219,11 +214,7 @@ def generate(
     progress=gr.Progress(),
 ) -> np.ndarray:
     global pipeline
-    generator = (
-        torch.cuda.manual_seed(seed)
-        if torch.cuda.is_available()
-        else torch.manual_seed(seed)
-    )
+    generator = torch.cuda.manual_seed(seed) if torch.cuda.is_available() else torch.manual_seed(seed)
     latent1 = pipeline.generate_latent(generator=generator)
     latent1 = latent1.to(device=pipeline.unet.device, dtype=pipeline.unet.dtype)
     if same_latent:
@@ -234,11 +225,7 @@ def generate(
     betas = generate_beta_tensor(size=interpolation_size, alpha=alpha, beta=beta)
     for i in progress.tqdm(
         range(interpolation_size - 2),
-        desc=(
-            f"Generating {interpolation_size-2} images"
-            if interpolation_size > 3
-            else "Generating 1 image"
-        ),
+        desc=(f"Generating {interpolation_size-2} images" if interpolation_size > 3 else "Generating 1 image"),
     ):
         it = betas[i + 1].item()
         images = pipeline.interpolate_single(
@@ -451,15 +438,9 @@ with gr.Blocks(css="style.css") as demo:
         cache_examples=CACHE_EXAMPLES,
     )
 
-    alpha.change(
-        fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
-    )
-    beta.change(
-        fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
-    )
-    interpolation_size.change(
-        fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot
-    )
+    alpha.change(fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot)
+    beta.change(fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot)
+    interpolation_size.change(fn=plot_gemma_fn, inputs=[alpha, beta, interpolation_size], outputs=gamma_plot)
     model_choice.change(
         fn=change_generate_button_fn,
         inputs=gr.Number(0, visible=False),

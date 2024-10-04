@@ -76,9 +76,7 @@ def bayesian_prior_selection(
             alpha=alpha,
             beta=beta,
         )
-        smoothness, _, _ = compute_smoothness_and_consistency(
-            interpolation_sequence, lpips_model
-        )
+        smoothness, _, _ = compute_smoothness_and_consistency(interpolation_sequence, lpips_model)
         return smoothness
 
     # Add prior into selection of alpha and beta
@@ -144,9 +142,7 @@ def bayesian_prior_selection(
     return alpha, beta
 
 
-def generate_beta_tensor(
-    size: int, alpha: float = 3, beta: float = 3
-) -> torch.FloatTensor:
+def generate_beta_tensor(size: int, alpha: float = 3, beta: float = 3) -> torch.FloatTensor:
     """
     Assume size as n
     Generates a PyTorch tensor of values [x0, x1, ..., xn-1] for the Beta distribution

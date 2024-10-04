@@ -31,7 +31,7 @@ NeurIPS 2024 Paper
 </p>
 
 ## 📌 Release
-[10/2024] We are now supporting interpolating between images via IP-Adapter.
+[10/2024] We are now supporting interpolating between images via [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter).
 
 [10/2024] PAID is accepted as a conference paper by NeurIPS 2024!
 
@@ -168,7 +168,6 @@ Our method offers users customized and diverse configurations to experiment with
 | Model Name            |  Link                                             |
 |-----------------------|-------------------------------------------------------------|
 | Stable Diffusion 1.4-512  | [CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)   |
-| Stable Diffusion 1.5-512  | [runwayml/stable-diffusion-v1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5) |
 | Stable Diffusion 2.1-768  | [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1) |
 | Stable Diffusion XL-1024   | [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) |
 |Animagine XL 3.1 |   [cagliostrolab/animagine-xl-3.1](https://huggingface.co/cagliostrolab/animagine-xl-3.1)|
