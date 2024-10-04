@@ -1,9 +1,331 @@
 from typing import Optional
 
 import torch
-from torch import FloatTensor, LongTensor, Size, Tensor
+from torch import FloatTensor, LongTensor, Size, Tensor, nn as nn
 
 from prior import generate_beta_tensor
+
+
+# class IPAttnProcessor(nn.Module):
+#     r"""
+#     Attention processor for IP-Adapater.
+#     Args:
+#         hidden_size (`int`):
+#             The hidden size of the attention layer.
+#         cross_attention_dim (`int`):
+#             The number of channels in the `encoder_hidden_states`.
+#         scale (`float`, defaults to 1.0):
+#             the weight scale of image prompt.
+#         num_tokens (`int`, defaults to 4 when do ip_adapter_plus it should be 16):
+#             The context length of the image features.
+#     """
+
+#     def __init__(self, hidden_size, cross_attention_dim=None, scale=1.0, num_tokens=4):
+#         super().__init__()
+
+#         self.hidden_size = hidden_size
+#         self.cross_attention_dim = cross_attention_dim
+#         self.scale = scale
+#         self.num_tokens = num_tokens
+
+#         self.to_k_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
+#         self.to_v_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
+
+#     def __call__(
+#         self,
+#         attn,
+#         hidden_states,
+#         encoder_hidden_states=None,
+#         attention_mask=None,
+#         temb=None,
+#         *args,
+#         **kwargs,
+#     ):
+#         residual = hidden_states
+
+#         if attn.spatial_norm is not None:
+#             hidden_states = attn.spatial_norm(hidden_states, temb)
+
+#         input_ndim = hidden_states.ndim
+
+#         if input_ndim == 4:
+#             batch_size, channel, height, width = hidden_states.shape
+#             hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
+
+#         batch_size, sequence_length, _ = (
+#             hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
+#         )
+#         attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
+
+#         if attn.group_norm is not None:
+#             hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+#         query = attn.to_q(hidden_states)
+
+#         if encoder_hidden_states is None:
+#             encoder_hidden_states = hidden_states
+#         else:
+#             # get encoder_hidden_states, ip_hidden_states
+#             end_pos = encoder_hidden_states.shape[1] - self.num_tokens
+#             encoder_hidden_states, ip_hidden_states = (
+#                 encoder_hidden_states[:, :end_pos, :],
+#                 encoder_hidden_states[:, end_pos:, :],
+#             )
+#             if attn.norm_cross:
+#                 encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+
+#         key = attn.to_k(encoder_hidden_states)
+#         value = attn.to_v(encoder_hidden_states)
+
+#         query = attn.head_to_batch_dim(query)
+#         key = attn.head_to_batch_dim(key)
+#         value = attn.head_to_batch_dim(value)
+
+#         attention_probs = attn.get_attention_scores(query, key, attention_mask)
+#         hidden_states = torch.bmm(attention_probs, value)
+#         hidden_states = attn.batch_to_head_dim(hidden_states)
+
+#         # for ip-adapter
+#         ip_key = self.to_k_ip(ip_hidden_states)
+#         ip_value = self.to_v_ip(ip_hidden_states)
+
+#         ip_key = attn.head_to_batch_dim(ip_key)
+#         ip_value = attn.head_to_batch_dim(ip_value)
+
+#         ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
+#         self.attn_map = ip_attention_probs
+#         ip_hidden_states = torch.bmm(ip_attention_probs, ip_value)
+#         ip_hidden_states = attn.batch_to_head_dim(ip_hidden_states)
+
+#         hidden_states = hidden_states + self.scale * ip_hidden_states
+
+#         # linear proj
+#         hidden_states = attn.to_out[0](hidden_states)
+#         # dropout
+#         hidden_states = attn.to_out[1](hidden_states)
+
+#         if input_ndim == 4:
+#             hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
+
+#         if attn.residual_connection:
+#             hidden_states = hidden_states + residual
+
+#         hidden_states = hidden_states / attn.rescale_output_factor
+
+#         return hidden_states
+
+
+class OuterInterpolatedIPAttnProcessor(nn.Module):
+    r"""
+    Personalized processor for performing outer attention interpolation.
+
+    The attention output of interpolated image is obtained by:
+    (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
+    If fused with self-attention:
+    (1 - t) * Q_t * [K_1, K_t] * [V_1, V_t] + t * Q_t * [K_m, K_t] * [V_m, V_t];
+    """
+
+    def __init__(
+        self,
+        t: Optional[float] = None,
+        size: int = 7,
+        is_fused: bool = False,
+        alpha: float = 1,
+        beta: float = 1,
+        ip_attn: Optional[nn.Module] = None
+    ):
+        """
+        t: float, interpolation point between 0 and 1, if specified, size is set to 3
+        """
+        super().__init__()
+        if t is None:
+            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
+            ts[0], ts[-1] = 0, 1
+        else:
+            assert t > 0 and t < 1, "t must be between 0 and 1"
+            ts = [0, t, 1]
+            ts = torch.tensor(ts)
+            size = 3
+
+        self.size = size
+        self.coef = ts
+        self.is_fused = is_fused
+
+        self.num_tokens = ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
+        self.scale = ip_attn.scale if hasattr(ip_attn, "scale") else None
+        self.ip_attn = ip_attn
+        self.use_origin = False
+
+    def set_origin(self):
+        self.use_origin = True
+
+    def set_interpolation(self):
+        self.use_origin = False
+
+    def set_t(self, t):
+        assert t > 0 and t < 1, "t must be between 0 and 1"
+        ts = [0, t, 1]
+        ts = torch.tensor(ts)
+        self.coef = ts
+
+    def __call__(
+        self,
+        attn,
+        hidden_states: torch.FloatTensor,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        temb: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        if self.use_origin:
+            return self.ip_attn(attn, hidden_states, encoder_hidden_states, attention_mask, temb)
+        
+        residual = hidden_states
+
+        if encoder_hidden_states is None:
+            encoder_hidden_states = hidden_states
+            ip_hidden_states = None
+        else:
+            if isinstance(encoder_hidden_states, tuple):
+                encoder_hidden_states, ip_hidden_states = encoder_hidden_states
+                # ip_hidden_states = ip_hidden_states[0]
+            else:
+                end_pos = encoder_hidden_states.shape[1] - self.num_tokens[0]
+                encoder_hidden_states, ip_hidden_states = (
+                    encoder_hidden_states[:, :end_pos, :],
+                    [encoder_hidden_states[:, end_pos:, :]],
+                )
+
+        if attn.spatial_norm is not None:
+            hidden_states = attn.spatial_norm(hidden_states, temb)
+
+        input_ndim = hidden_states.ndim
+
+        if input_ndim == 4:
+            batch_size, channel, height, width = hidden_states.shape
+            hidden_states = hidden_states.view(
+                batch_size, channel, height * width
+            ).transpose(1, 2)
+
+        batch_size, sequence_length, _ = (
+            hidden_states.shape
+            if encoder_hidden_states is None
+            else encoder_hidden_states.shape
+        )
+        attention_mask = attn.prepare_attention_mask(
+            attention_mask, sequence_length, batch_size
+        )
+
+        if attn.group_norm is not None:
+            hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(
+                1, 2
+            )
+
+        query = attn.to_q(hidden_states)
+        query = attn.head_to_batch_dim(query)
+
+        key = attn.to_k(encoder_hidden_states)
+        value = attn.to_v(encoder_hidden_states)
+
+        # Specify the first and last key and value
+        key_begin = key[0:1]
+        key_end = key[-1:]
+        value_begin = value[0:1]
+        value_end = value[-1:]
+
+        key_begin = torch.cat([key_begin] * (self.size))
+        key_end = torch.cat([key_end] * (self.size))
+        value_begin = torch.cat([value_begin] * (self.size))
+        value_end = torch.cat([value_end] * (self.size))
+
+        key_begin = attn.head_to_batch_dim(key_begin)
+        value_begin = attn.head_to_batch_dim(value_begin)
+        key_end = attn.head_to_batch_dim(key_end)
+        value_end = attn.head_to_batch_dim(value_end)
+
+        # Fused with self-attention
+        if self.is_fused:
+            key = attn.head_to_batch_dim(key)
+            value = attn.head_to_batch_dim(value)
+            key_end = torch.cat([key, key_end], dim=-2)
+            value_end = torch.cat([value, value_end], dim=-2)
+            key_begin = torch.cat([key, key_begin], dim=-2)
+            value_begin = torch.cat([value, value_begin], dim=-2)
+
+        attention_probs_end = attn.get_attention_scores(query, key_end, attention_mask)
+        hidden_states_end = torch.bmm(attention_probs_end, value_end)
+        hidden_states_end = attn.batch_to_head_dim(hidden_states_end)
+
+        attention_probs_begin = attn.get_attention_scores(
+            query, key_begin, attention_mask
+        )
+        hidden_states_begin = torch.bmm(attention_probs_begin, value_begin)
+        hidden_states_begin = attn.batch_to_head_dim(hidden_states_begin)
+
+        # for ip-adapter
+        if ip_hidden_states is not None:
+            key = self.ip_attn.to_k_ip[0](ip_hidden_states[0])
+            value = self.ip_attn.to_v_ip[0](ip_hidden_states[0])
+
+            # Specify the first and last key and value
+            key_begin = key[0:1]
+            key_end = key[-1:]
+            value_begin = value[0:1]
+            value_end = value[-1:]
+
+            key_begin = torch.cat([key_begin] * (self.size))
+            key_end = torch.cat([key_end] * (self.size))
+            value_begin = torch.cat([value_begin] * (self.size))
+            value_end = torch.cat([value_end] * (self.size))
+
+            key_begin = attn.head_to_batch_dim(key_begin)
+            value_begin = attn.head_to_batch_dim(value_begin)
+            key_end = attn.head_to_batch_dim(key_end)
+            value_end = attn.head_to_batch_dim(value_end)
+
+            key = attn.head_to_batch_dim(key)
+            value = attn.head_to_batch_dim(value)
+
+            # Fused with self-attention
+            if self.is_fused:
+                key = attn.head_to_batch_dim(key)
+                value = attn.head_to_batch_dim(value)
+                key_end = torch.cat([key, key_end], dim=-2)
+                value_end = torch.cat([value, value_end], dim=-2)
+                key_begin = torch.cat([key, key_begin], dim=-2)
+                value_begin = torch.cat([value, value_begin], dim=-2)
+
+            ip_attention_probs_end = attn.get_attention_scores(query, key_end, attention_mask)
+            ip_hidden_states_end = torch.bmm(ip_attention_probs_end, value_end)
+            ip_hidden_states_end = attn.batch_to_head_dim(ip_hidden_states_end)
+
+            ip_attention_probs_begin = attn.get_attention_scores(
+                query, key_begin, attention_mask
+            )
+            ip_hidden_states_begin = torch.bmm(ip_attention_probs_begin, value_begin)
+            ip_hidden_states_begin = attn.batch_to_head_dim(ip_hidden_states_begin)
+
+            hidden_states_begin = hidden_states_begin + self.scale[0] * ip_hidden_states_begin
+            hidden_states_end = hidden_states_end + self.scale[0] * ip_hidden_states_end
+
+        # Apply outer interpolation on attention
+        coef = self.coef.reshape(-1, 1, 1)
+        coef = coef.to(key.device, key.dtype)
+        hidden_states = (1 - coef) * hidden_states_begin + coef * hidden_states_end
+
+        hidden_states = attn.to_out[0](hidden_states)
+        hidden_states = attn.to_out[1](hidden_states)
+
+        if input_ndim == 4:
+            hidden_states = hidden_states.transpose(-1, -2).reshape(
+                batch_size, channel, height, width
+            )
+
+        if attn.residual_connection:
+            hidden_states = hidden_states + residual
+
+        hidden_states = hidden_states / attn.rescale_output_factor
+
+        return hidden_states
 
 
 class OuterInterpolatedAttnProcessor:
