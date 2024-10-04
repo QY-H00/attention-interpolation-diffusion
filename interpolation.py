@@ -5,6 +5,7 @@ from torch import FloatTensor, LongTensor, Size, Tensor, nn as nn
 
 from prior import generate_beta_tensor
 
+
 class OuterInterpolatedIPAttnProcessor(nn.Module):
     r"""
     Personalized processor for performing outer attention interpolation.
@@ -22,7 +23,7 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
-        ip_attn: Optional[nn.Module] = None
+        ip_attn: Optional[nn.Module] = None,
     ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
@@ -41,7 +42,9 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         self.coef = ts
         self.is_fused = is_fused
 
-        self.num_tokens = ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
+        self.num_tokens = (
+            ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
+        )
         self.scale = ip_attn.scale if hasattr(ip_attn, "scale") else None
         self.ip_attn = ip_attn
         self.use_origin = False
@@ -67,8 +70,10 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         if self.use_origin:
-            return self.ip_attn(attn, hidden_states, encoder_hidden_states, attention_mask, temb)
-        
+            return self.ip_attn(
+                attn, hidden_states, encoder_hidden_states, attention_mask, temb
+            )
+
         residual = hidden_states
 
         if encoder_hidden_states is None:
@@ -183,7 +188,9 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
                 key_begin = torch.cat([key, key_begin], dim=-2)
                 value_begin = torch.cat([value, value_begin], dim=-2)
 
-            ip_attention_probs_end = attn.get_attention_scores(query, key_end, attention_mask)
+            ip_attention_probs_end = attn.get_attention_scores(
+                query, key_end, attention_mask
+            )
             ip_hidden_states_end = torch.bmm(ip_attention_probs_end, value_end)
             ip_hidden_states_end = attn.batch_to_head_dim(ip_hidden_states_end)
 
@@ -193,7 +200,9 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
             ip_hidden_states_begin = torch.bmm(ip_attention_probs_begin, value_begin)
             ip_hidden_states_begin = attn.batch_to_head_dim(ip_hidden_states_begin)
 
-            hidden_states_begin = hidden_states_begin + self.scale[0] * ip_hidden_states_begin
+            hidden_states_begin = (
+                hidden_states_begin + self.scale[0] * ip_hidden_states_begin
+            )
             hidden_states_end = hidden_states_end + self.scale[0] * ip_hidden_states_end
 
         # Apply outer interpolation on attention

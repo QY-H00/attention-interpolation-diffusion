@@ -1058,7 +1058,9 @@ class InterpolationStableDiffusionXLPipeline(
     # load customized ip_adapter
     def load_interpolated_ip_adapter(
         self,
-        pretrained_model_name_or_path_or_dict: Union[str, List[str], Dict[str, torch.Tensor]],
+        pretrained_model_name_or_path_or_dict: Union[
+            str, List[str], Dict[str, torch.Tensor]
+        ],
         subfolder: Union[str, List[str]],
         weight_name: Union[str, List[str]],
         t: Optional[float] = 0.5,
@@ -1066,7 +1068,7 @@ class InterpolationStableDiffusionXLPipeline(
         image_encoder_folder: Optional[str] = "image_encoder",
         device="cuda",
         **kwargs,
-        ):
+    ):
         self.load_ip_adapter(
             pretrained_model_name_or_path_or_dict=pretrained_model_name_or_path_or_dict,
             subfolder=subfolder,
@@ -2083,7 +2085,7 @@ class InterpolationStableDiffusionXLPipeline(
                 3,
                 self.do_classifier_free_guidance,
             )
-        
+
         if image_start is not None:
             image_embeds_start = self.prepare_ip_adapter_image_embeds(
                 image_start,
@@ -2121,7 +2123,12 @@ class InterpolationStableDiffusionXLPipeline(
         ).to(device=device)
 
         negative_image_embeds = torch.cat(
-            [negative_image_embeds_start, negative_image_embeds_target, negative_image_embeds_end], dim=0
+            [
+                negative_image_embeds_start,
+                negative_image_embeds_target,
+                negative_image_embeds_end,
+            ],
+            dim=0,
         ).to(device=device)
 
         image_embeds = [image_embeds]
@@ -2181,19 +2188,23 @@ class InterpolationStableDiffusionXLPipeline(
                 if i < warmup_steps:
                     for name in self.unet.attn_processors.keys():
                         if not name.startswith("encoder"):
-                          self.unet.attn_processors[name].set_interpolation()
-                          self.unet.attn_processors[name].set_t(it)
+                            self.unet.attn_processors[name].set_interpolation()
+                            self.unet.attn_processors[name].set_t(it)
                 else:
                     for name in self.unet.attn_processors.keys():
                         if not name.startswith("encoder"):
-                          self.unet.attn_processors[name].set_origin()
+                            self.unet.attn_processors[name].set_origin()
 
                 # predict the noise residual for conditional noise
                 added_cond_kwargs = {
                     "text_embeds": pooled_prompt_embeds,
                     "time_ids": add_time_ids,
                 }
-                if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
+                if (
+                    (image_start is not None and image_end is not None)
+                    or ip_adapter_image is not None
+                    or ip_adapter_image_embeds is not None
+                ):
                     added_cond_kwargs["image_embeds"] = image_embeds
                 noise_pred_text = self.unet(
                     latent_model_input,
@@ -2215,7 +2226,11 @@ class InterpolationStableDiffusionXLPipeline(
                     "text_embeds": negative_pooled_prompt_embeds,
                     "time_ids": negative_add_time_ids,
                 }
-                if (image_start is not None and image_end is not None) or ip_adapter_image is not None or ip_adapter_image_embeds is not None:
+                if (
+                    (image_start is not None and image_end is not None)
+                    or ip_adapter_image is not None
+                    or ip_adapter_image_embeds is not None
+                ):
                     added_cond_kwargs["image_embeds"] = negative_image_embeds
                 noise_pred_uncond = self.unet(
                     latent_model_input,
