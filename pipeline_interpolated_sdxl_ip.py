@@ -50,7 +50,9 @@ from diffusers.utils import (
 from diffusers.utils.torch_utils import randn_tensor
 
 from interpolation import (
+    InnerInterpolatedIPAttnProcessor,
     OuterInterpolatedIPAttnProcessor,
+    ScaleControlIPAttnProcessor,
     slerp,
 )
 from transformers import (
@@ -963,9 +965,10 @@ class InterpolationStableDiffusionXLPipeline(
         subfolder: Union[str, List[str]],
         weight_name: Union[str, List[str]],
         t: Optional[float] = 0.5,
-        is_fused: bool = False,
+        is_fused: bool = True,
         image_encoder_folder: Optional[str] = "image_encoder",
         device="cuda",
+        early="fused_outer",
         **kwargs,
     ):
         self.load_ip_adapter(
@@ -978,9 +981,18 @@ class InterpolationStableDiffusionXLPipeline(
         attn_procs = {}
         for name in self.unet.attn_processors.keys():
             if not name.startswith("encoder"):
-                attn_procs[name] = OuterInterpolatedIPAttnProcessor(
-                    t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
-                )
+                if early == "fused_outer":
+                    attn_procs[name] = OuterInterpolatedIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
+                elif early == "fused_inner":
+                    attn_procs[name] = InnerInterpolatedIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
+                elif early == "scale_control":
+                    attn_procs[name] = ScaleControlIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
             else:
                 attn_procs[name] = self.unet.attn_processors[name]
         self.unet.set_attn_processor(attn_procs)
@@ -1505,6 +1517,7 @@ class InterpolationStableDiffusionXLPipeline(
         early: str = "fused_outer",
         late: str = "self",
         init: str = "linear",
+        mode: str = "morph",
         prompt_2: Optional[Union[str, List[str]]] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
@@ -1930,6 +1943,7 @@ class InterpolationStableDiffusionXLPipeline(
                 3,
                 self.do_classifier_free_guidance,
             )
+            negative_image_embeds_start, image_embeds_start = image_embeds_start[0].chunk(2)
 
         if image_end is not None:
             image_embeds_end = self.prepare_ip_adapter_image_embeds(
@@ -1939,9 +1953,11 @@ class InterpolationStableDiffusionXLPipeline(
                 3,
                 self.do_classifier_free_guidance,
             )
+            negative_image_embeds_end, image_embeds_end = image_embeds_end[0].chunk(2)
 
-        negative_image_embeds_start, image_embeds_start = image_embeds_start[0].chunk(2)
-        negative_image_embeds_end, image_embeds_end = image_embeds_end[0].chunk(2)
+            if image_start is None:
+                image_embeds_start = negative_image_embeds_end
+                negative_image_embeds_start = negative_image_embeds_end
 
         if init == "linear":
             image_embeds_target = torch.lerp(image_embeds_start, image_embeds_end, it)
@@ -2025,7 +2041,7 @@ class InterpolationStableDiffusionXLPipeline(
                     "time_ids": add_time_ids,
                 }
                 if (
-                    (image_start is not None and image_end is not None)
+                    (image_start is not None or image_end is not None)
                     or ip_adapter_image is not None
                     or ip_adapter_image_embeds is not None
                 ):
@@ -2051,7 +2067,7 @@ class InterpolationStableDiffusionXLPipeline(
                     "time_ids": negative_add_time_ids,
                 }
                 if (
-                    (image_start is not None and image_end is not None)
+                    (image_start is not None or image_end is not None)
                     or ip_adapter_image is not None
                     or ip_adapter_image_embeds is not None
                 ):

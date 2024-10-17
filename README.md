@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="asset/logo.png"  height=350>
+  <img src="sdxl_results/aesthetic/1.jpg">
 </p>
 
 ### <div align="center">PAID: (Prompt-guided) Attention Interpolation of Text-to-Image Diffusion<div>
@@ -31,7 +31,9 @@ NeurIPS 2024 Paper
 </p>
 
 ## 📌 Release
-[10/2024] We are now supporting interpolating between images via [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter).
+[10/2024] We add dynamic pipeline to further improve smoothness, try `play_sdxl_ebta.ipynb`!
+
+[10/2024] We are now supporting interpolating between images via [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter), try `play_ip.ipynb`!
 
 [10/2024] PAID is accepted as a conference paper by NeurIPS 2024!
 
@@ -47,40 +49,68 @@ Conditional diffusion models can create unseen images in various settings, aidin
 
 ## ▶️ PAID Results
 
+#### Aesthetic
+
 <p align="center">
-<img src="sdxl_example/1.png">
+<img src="sdxl_results/aesthetic/2.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/2.png">
+<img src="sdxl_results/aesthetic/3.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/3.png">
+<img src="sdxl_results/aesthetic/4.jpg">
+</p>
+
+#### Anime
+
+<p align="center">
+<img src="sdxl_results/anime/1.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/4.png">
+<img src="sdxl_results/anime/2.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/5.png">
+<img src="sdxl_results/anime/3.jpg">
+</p>
+
+#### Photorealistic
+
+<p align="center">
+<img src="sdxl_results/photorealistic/1.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/6.png">
+<img src="sdxl_results/photorealistic/2.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/7.png">
+<img src="sdxl_results/photorealistic/3.jpg">
+</p>
+
+## 📷 PAID + IP-Adapter
+
+#### Image Morphing
+
+<p align="center">
+<img src="sdxl_results/morph/1.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/8.png">
+<img src="sdxl_results/morph/2.jpg">
+</p>
+
+#### Scale Control of Image Prompt
+
+<p align="center">
+<img src="sdxl_results/scale_control/1.jpg">
 </p>
 
 <p align="center">
-<img src="sdxl_example/9.png">
+<img src="sdxl_results/scale_control/2.jpg">
 </p>
 
 ## 🏍️ Google Colab

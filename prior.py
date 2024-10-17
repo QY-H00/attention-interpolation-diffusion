@@ -1,9 +1,303 @@
+import numpy as np
 import torch
 from bayes_opt import BayesianOptimization, SequentialDomainReductionTransformer
 from lpips import LPIPS
+from scipy.optimize import curve_fit
 from scipy.stats import beta as beta_distribution
 
+from transformers import CLIPImageProcessor, CLIPModel
 from utils import compute_lpips, compute_smoothness_and_consistency
+
+
+class BetaPriorPipeline:
+    def __init__(self, pipe, model_ID="openai/clip-vit-base-patch32"):
+        self.model = CLIPModel.from_pretrained(model_ID)
+        self.preprocess = CLIPImageProcessor.from_pretrained(model_ID)
+        self.pipe = pipe
+
+    def _compute_clip(self, embedding_a, embedding_b):
+        similarity_score = torch.nn.functional.cosine_similarity(embedding_a, embedding_b)
+        return 1 - similarity_score[0]
+
+    def _get_feature(self, image):
+        with torch.no_grad():
+            if isinstance(image, np.ndarray):
+                image = self.preprocess(image, return_tensors="pt", do_rescale=False).pixel_values
+            else:
+                image = self.preprocess(image, return_tensors="pt").pixel_values
+            embedding = self.model.get_image_features(image)
+        return embedding
+
+    def _update_alpha_beta(self, xs, ds):
+        uniform_point = []
+        ds_sum = sum(ds)
+        for i in range(len(ds)):
+            uniform_point.append(ds[i] / ds_sum)
+        uniform_point = [0] + uniform_point
+        uniform_points = np.cumsum(uniform_point)
+
+        xs = np.asarray(xs)
+        uniform_points = np.asarray(uniform_points)
+
+        def beta_cdf(x, alpha, beta_param):
+            return beta_distribution.cdf(x, alpha, beta_param)
+
+        initial_guess = [1.0, 1.0]
+        bounds = ([1e-6, 1e-6], [np.inf, np.inf])
+        params, covariance = curve_fit(
+            beta_cdf, xs, uniform_points, p0=initial_guess, bounds=bounds
+        )
+
+        fitted_alpha, fitted_beta = params
+        return fitted_alpha, fitted_beta
+
+    def _add_next_point(
+        self,
+        ds,
+        xs,
+        images,
+        features,
+        alpha,
+        beta_param,
+        prompt_start,
+        prompt_end,
+        negative_prompt,
+        latent_start,
+        latent_end,
+        num_inference_steps,
+        uniform=False,
+        **kwargs
+    ):
+        idx = np.argmax(ds)
+        A = xs[idx]
+        B = xs[idx+1]
+        F_A = beta_distribution.cdf(A, alpha, beta_param)
+        F_B = beta_distribution.cdf(B, alpha, beta_param)
+
+        # Compute the target CDF for t
+        F_t = (F_A + F_B) / 2
+
+        # Compute the value of t using the inverse CDF (percent point function)
+        t = beta_distribution.ppf(F_t, alpha, beta_param)
+
+        if uniform:
+            idx = np.argmax(np.array(xs) - np.array([0] + xs[:-1])) - 1
+            t = (xs[idx] + xs[idx+1]) / 2
+
+        if t < 0 or t > 1:
+            return xs, False
+
+        ims = self.pipe.interpolate_single(
+                t,
+                prompt_start=prompt_start,
+                prompt_end=prompt_end,
+                negative_prompt=negative_prompt,
+                latent_start=latent_start,
+                latent_end=latent_end,
+                early='fused_outer',
+                num_inference_steps=num_inference_steps,
+                **kwargs
+            )
+
+        added_image = ims.images[1]
+        added_feature = self._get_feature(added_image)
+        d1 = self._compute_clip(features[idx], added_feature)
+        d2 = self._compute_clip(features[idx+1], added_feature)
+
+        images.insert(idx+1, ims.images[1])
+        features.insert(idx+1, added_feature)
+        xs.insert(idx+1, t)
+        del ds[idx]
+        ds.insert(idx, d1)
+        ds.insert(idx+1, d2)
+        return xs, True
+
+    def explore_with_beta(
+        self,
+        prompt_start,
+        prompt_end,
+        negative_prompt,
+        latent_start,
+        latent_end,
+        num_inference_steps=28,
+        exploration_size=16,
+        init_alpha=3,
+        init_beta=3,
+        uniform=False,
+        **kwargs
+    ):
+        xs = [0.0, 0.5, 1.0]
+        images = self.pipe.interpolate_single(
+            0.5,
+            prompt_start=prompt_start,
+            prompt_end=prompt_end,
+            negative_prompt=negative_prompt,
+            latent_start=latent_start,
+            latent_end=latent_end,
+            early='fused_outer',
+            num_inference_steps=num_inference_steps,
+            **kwargs
+        )
+        images = images.images
+        images = [images[0], images[1], images[2]]
+        features = [self._get_feature(image) for image in images]
+        ds =[self._compute_clip(features[0], features[1]), self._compute_clip(features[1], features[2])]
+        alpha = init_alpha
+        beta_param = init_beta
+        print("Alpha:", alpha, "| Beta:", beta_param, "| Current Coefs:", xs, "| Current Distances:", ds)
+        while len(xs) < exploration_size:
+            xs, flag = self._add_next_point(
+                ds,
+                xs,
+                images,
+                features,
+                alpha,
+                beta_param,
+                prompt_start,
+                prompt_end,
+                negative_prompt,
+                latent_start,
+                latent_end,
+                num_inference_steps,
+                uniform=uniform,
+                **kwargs
+            )
+            if not flag:
+                break
+            alpha, beta_param = self._update_alpha_beta(xs, ds)
+            if uniform:
+                alpha = 1
+                beta_param = 1
+            print(f"--------Exploration: {len(xs)} / {exploration_size}--------")
+            print("Alpha:", alpha, "| Beta:", beta_param, "| Current Coefs:", xs, "| Current Distances:", ds)
+
+        return images, features, ds, xs, alpha, beta_param
+
+    def extract_uniform_points(self, ds, interpolation_size):
+        expected_dis = sum(ds) / (interpolation_size - 1)
+        current_sum = 0
+        output_idxs = [0]
+        for idx, d in enumerate(ds):
+            current_sum += d
+            if current_sum >= expected_dis:
+                output_idxs.append(idx)
+                current_sum = 0
+        return output_idxs
+
+    def extract_uniform_points_plus(self, features, interpolation_size):
+        weights = -1 * np.ones((len(features), len(features)))
+        for i in range(len(features)):
+            for j in range(i+1, len(features)):
+                weights[i][j] = self._compute_clip(features[i], features[j])
+        m = len(features)
+        n = interpolation_size
+        _, best_path = self.find_minimal_spread_and_path(n, m, weights)
+        print("Optimal smooth path:", best_path)
+        return best_path
+
+    def find_minimal_spread_and_path(self, n, m, weights):
+        # Collect all unique edge weights, excluding non-existent edges (-1)
+        W = sorted({
+            weights[i][j] for i in range(m - 1) for j in range(i + 1, m) if weights[i][j] != -1
+        })
+        min_weight = W[0]
+        max_weight = W[-1]
+
+        low = 0.0
+        high = max_weight - min_weight
+        epsilon = 1e-6  # Desired precision
+
+        best_D = None
+        best_path = None
+
+        while high - low > epsilon:
+            D = (low + high) / 2
+            result = self.is_path_possible(D, n, m, weights, W)
+            if result is not None:
+                # A valid path is found
+                high = D
+                best_D = D
+                best_path = result
+            else:
+                low = D
+
+        return best_D, best_path
+
+    def is_path_possible(self, D, n, m, weights, W):
+        for w_min in W:
+            w_max = w_min + D
+            if w_max > W[-1]:
+                break
+
+            # Dynamic Programming to check for a valid path
+            dp = [[None] * (n + 1) for _ in range(m)]
+            dp[0][1] = (float('-inf'), float('inf'), [0])  # Start from x1 with path length 1
+
+            for l in range(1, n):
+                for i in range(m):
+                    if dp[i][l] is not None:
+                        max_w, min_w, path = dp[i][l]
+                        for j in range(i + 1, m):
+                            w = weights[i][j]
+                            if w != -1 and w_min <= w <= w_max:
+                                # Update max and min weights along the path
+                                new_max_w = max(max_w, w)
+                                new_min_w = min(min_w, w)
+                                new_diff = new_max_w - new_min_w
+                                if new_diff <= D:
+                                    dp_j_l_plus_1 = dp[j][l + 1]
+                                    if dp_j_l_plus_1 is None or new_diff < (dp_j_l_plus_1[0] - dp_j_l_plus_1[1]):
+                                        dp[j][l + 1] = (new_max_w, new_min_w, path + [j])
+
+            if dp[m - 1][n] is not None:
+                # Reconstruct the path
+                _, _, path = dp[m - 1][n]
+                return path  # Return the path if found
+
+        return None  # Return None if no valid path is found
+
+    def generate_interpolation(
+        self,
+        prompt_start,
+        prompt_end,
+        negative_prompt,
+        latent_start,
+        latent_end,
+        num_inference_steps=28,
+        exploration_size=16,
+        init_alpha=3,
+        init_beta=3,
+        interpolation_size=7,
+        uniform=False,
+        **kwargs
+    ):
+        images, features, ds, xs, alpha, beta_param = self.explore_with_beta(
+            prompt_start,
+            prompt_end,
+            negative_prompt,
+            latent_start,
+            latent_end,
+            num_inference_steps,
+            exploration_size,
+            init_alpha,
+            init_beta,
+            uniform=uniform,
+            **kwargs
+        )
+        # output_idx = self.extract_uniform_points(ds, interpolation_size)
+        output_idx = self.extract_uniform_points_plus(features, interpolation_size)
+        output_images = []
+        for idx in output_idx:
+            output_images.append(images[idx])
+
+        # for call_back
+        self.images = images
+        self.ds = ds
+        self.xs = xs
+        self.alpha = alpha
+        self.beta_param = beta_param
+
+        return output_images
 
 
 def bayesian_prior_selection(
@@ -140,7 +434,6 @@ def bayesian_prior_selection(
     alpha = results["params"]["alpha"]
     beta = results["params"]["beta"]
     return alpha, beta
-
 
 def generate_beta_tensor(size: int, alpha: float = 3, beta: float = 3) -> torch.FloatTensor:
     """

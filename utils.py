@@ -43,6 +43,29 @@ def show_images_horizontally(
         plt.savefig(output_file, bbox_inches="tight", pad_inches=0.25)
 
 
+def image_grids(images, rows=None, cols=None):
+    if not images:
+        raise ValueError("The image list is empty.")
+    
+    n_images = len(images)
+    if cols is None:
+        cols = int(n_images**0.5)
+    if rows is None:
+        rows = (n_images + cols - 1) // cols
+    
+    width, height = images[0].size
+    grid_width = cols * width
+    grid_height = rows * height
+    
+    grid_image = Image.new('RGB', (grid_width, grid_height))
+    
+    for i, image in enumerate(images):
+        row, col = divmod(i, cols)
+        grid_image.paste(image, (col * width, row * height))
+    
+    return grid_image
+
+
 def save_image(image: np.array, file_name: str) -> None:
     """
     Save the image as JPG.

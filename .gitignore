@@ -4,6 +4,7 @@ weights/
 corpus/
 exp/
 my_diffusers/
+sdxl_example/
 exp_fid.ipynb
 exp_appendix.ipynb
 exp_ablation.ipynb
@@ -20,3 +21,5 @@ edict.py
 .vscode/
 shiyishi.*
 exp_sdxl.ipynb
+playground.py
+references/
