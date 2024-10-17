@@ -38,8 +38,12 @@ class InterpolationStableDiffusionPipeline:
         cache_dir: Optional[str] = None,
     ):
         # Initialize the generator
-        self.vae = AutoencoderKL.from_pretrained(repo_name, subfolder="vae", use_safetensors=True, cache_dir=cache_dir)
-        self.tokenizer = CLIPTokenizer.from_pretrained(repo_name, subfolder="tokenizer", cache_dir=cache_dir)
+        self.vae = AutoencoderKL.from_pretrained(
+            repo_name, subfolder="vae", use_safetensors=True, cache_dir=cache_dir
+        )
+        self.tokenizer = CLIPTokenizer.from_pretrained(
+            repo_name, subfolder="tokenizer", cache_dir=cache_dir
+        )
         self.text_encoder = CLIPTextModel.from_pretrained(
             repo_name,
             subfolder="text_encoder",
@@ -54,13 +58,17 @@ class InterpolationStableDiffusionPipeline:
         if scheduler is not None:
             self.scheduler = scheduler
         elif scheduler_name == "ddim":
-            self.scheduler = DDIMScheduler.from_pretrained(repo_name, subfolder="scheduler", cache_dir=cache_dir)
+            self.scheduler = DDIMScheduler.from_pretrained(
+                repo_name, subfolder="scheduler", cache_dir=cache_dir
+            )
         elif scheduler_name == "unipc":
             self.scheduler = UniPCMultistepScheduler.from_pretrained(
                 repo_name, subfolder="scheduler", cache_dir=cache_dir
             )
         else:
-            raise ValueError("Invalid scheduler name (ddim, unipc) and not specify scheduler.")
+            raise ValueError(
+                "Invalid scheduler name (ddim, unipc) and not specify scheduler."
+            )
 
         # Setup device
 
@@ -111,7 +119,9 @@ class InterpolationStableDiffusionPipeline:
         return latent
 
     @torch.no_grad()
-    def prompt_to_embedding(self, prompt: str, negative_prompt: str = "") -> torch.FloatTensor:
+    def prompt_to_embedding(
+        self, prompt: str, negative_prompt: str = ""
+    ) -> torch.FloatTensor:
         """
         Prepare the text prompt for the diffusion process
 
@@ -131,7 +141,9 @@ class InterpolationStableDiffusionPipeline:
             return_tensors="pt",
         )
 
-        text_embeddings = self.text_encoder(text_input.input_ids.to(self.torch_device))[0]
+        text_embeddings = self.text_encoder(text_input.input_ids.to(self.torch_device))[
+            0
+        ]
 
         uncond_input = self.tokenizer(
             negative_prompt,
@@ -140,7 +152,9 @@ class InterpolationStableDiffusionPipeline:
             truncation=True,
             return_tensors="pt",
         )
-        uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.torch_device))[0]
+        uncond_embeddings = self.text_encoder(
+            uncond_input.input_ids.to(self.torch_device)
+        )[0]
 
         text_embeddings = torch.cat([text_embeddings, uncond_embeddings])
         return text_embeddings
@@ -215,7 +229,9 @@ class InterpolationStableDiffusionPipeline:
             )
         else:
             embs = linear_interpolation(emb_start, emb_end, size=size)
-            uncond_embs = linear_interpolation(uncond_emb_start, uncond_emb_end, size=size)
+            uncond_embs = linear_interpolation(
+                uncond_emb_start, uncond_emb_end, size=size
+            )
 
         # Specify the interpolation methods
         pure_inner_attn_proc = InnerInterpolatedAttnProcessor(
@@ -266,10 +282,14 @@ class InterpolationStableDiffusionPipeline:
                 self.unet.set_attn_processor(processor=interpolate_attn_proc)
 
                 # Predict the noise residual
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+                noise_pred = self.unet(
+                    latent_model_input, t, encoder_hidden_states=embs
+                ).sample
                 attn_proc = AttnProcessor2_0()
                 self.unet.set_attn_processor(processor=attn_proc)
-                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+                noise_uncond = self.unet(
+                    latent_model_input, t, encoder_hidden_states=uncond_embs
+                ).sample
             # perform guidance
             noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
@@ -479,10 +499,14 @@ class InterpolationStableDiffusionPipeline:
                     interpolate_attn_proc = procs_dict[late]
                 self.unet.set_attn_processor(processor=interpolate_attn_proc)
                 # predict the noise residual
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=embs).sample
+                noise_pred = self.unet(
+                    latent_model_input, t, encoder_hidden_states=embs
+                ).sample
                 attn_proc = AttnProcessor2_0()
                 self.unet.set_attn_processor(processor=attn_proc)
-                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_embs).sample
+                noise_uncond = self.unet(
+                    latent_model_input, t, encoder_hidden_states=uncond_embs
+                ).sample
             # perform guidance
             noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
             # compute the previous noisy sample x_t -> x_t-1
@@ -535,12 +559,20 @@ class InterpolationStableDiffusionPipeline:
             # predict the noise residual
             with torch.no_grad():
                 if i < timesteps * interpolated_ratio:
-                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=emb_1).sample
+                    noise_pred = self.unet(
+                        latent_model_input, t, encoder_hidden_states=emb_1
+                    ).sample
                 else:
-                    noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=emb_2).sample
-                noise_uncond = self.unet(latent_model_input, t, encoder_hidden_states=uncond_emb).sample
+                    noise_pred = self.unet(
+                        latent_model_input, t, encoder_hidden_states=emb_2
+                    ).sample
+                noise_uncond = self.unet(
+                    latent_model_input, t, encoder_hidden_states=uncond_emb
+                ).sample
             # perform guidance
-            noise_pred = noise_uncond + self.guidance_scale * (noise_pred - noise_uncond)
+            noise_pred = noise_uncond + self.guidance_scale * (
+                noise_pred - noise_uncond
+            )
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
         latents = 1 / 0.18215 * latents

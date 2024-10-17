@@ -29,7 +29,9 @@ def show_images_horizontally(
     fig_height = fig_width * sum(heights) / sum(widths)
 
     # Create a figure with subplots
-    _, axs = plt.subplots(1, number_of_files, figsize=(fig_width * number_of_files, fig_height))
+    _, axs = plt.subplots(
+        1, number_of_files, figsize=(fig_width * number_of_files, fig_height)
+    )
     plt.tight_layout()
     for i in range(number_of_files):
         _image = list_of_files[i]
@@ -46,23 +48,23 @@ def show_images_horizontally(
 def image_grids(images, rows=None, cols=None):
     if not images:
         raise ValueError("The image list is empty.")
-    
+
     n_images = len(images)
     if cols is None:
         cols = int(n_images**0.5)
     if rows is None:
         rows = (n_images + cols - 1) // cols
-    
+
     width, height = images[0].size
     grid_width = cols * width
     grid_height = rows * height
-    
-    grid_image = Image.new('RGB', (grid_width, grid_height))
-    
+
+    grid_image = Image.new("RGB", (grid_width, grid_height))
+
     for i, image in enumerate(images):
         row, col = divmod(i, cols)
         grid_image.paste(image, (col * width, row * height))
-    
+
     return grid_image
 
 
@@ -96,7 +98,9 @@ def load_and_process_images(load_dir: str) -> np.array:
     for filename in filenames:
         if filename.endswith(".jpg"):
             img = Image.open(os.path.join(load_dir, filename))
-            img_array = np.asarray(img) / 255.0  # Convert to numpy array and scale pixel values to [0, 1]
+            img_array = (
+                np.asarray(img) / 255.0
+            )  # Convert to numpy array and scale pixel values to [0, 1]
             images.append(img_array)
     return images
 

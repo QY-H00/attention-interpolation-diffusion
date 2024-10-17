@@ -29,7 +29,9 @@ def show_images_horizontally(
     fig_height = fig_width * sum(heights) / sum(widths)
 
     # Create a figure with subplots
-    _, axs = plt.subplots(1, number_of_files, figsize=(fig_width * number_of_files, fig_height))
+    _, axs = plt.subplots(
+        1, number_of_files, figsize=(fig_width * number_of_files, fig_height)
+    )
     plt.tight_layout()
     for i in range(number_of_files):
         _image = list_of_files[i]
@@ -73,7 +75,9 @@ def load_and_process_images(load_dir: str) -> np.array:
     for filename in filenames:
         if filename.endswith(".jpg"):
             img = Image.open(os.path.join(load_dir, filename))
-            img_array = np.asarray(img) / 255.0  # Convert to numpy array and scale pixel values to [0, 1]
+            img_array = (
+                np.asarray(img) / 255.0
+            )  # Convert to numpy array and scale pixel values to [0, 1]
             images.append(img_array)
     return images
 

@@ -16,13 +16,17 @@ class BetaPriorPipeline:
         self.pipe = pipe
 
     def _compute_clip(self, embedding_a, embedding_b):
-        similarity_score = torch.nn.functional.cosine_similarity(embedding_a, embedding_b)
+        similarity_score = torch.nn.functional.cosine_similarity(
+            embedding_a, embedding_b
+        )
         return 1 - similarity_score[0]
 
     def _get_feature(self, image):
         with torch.no_grad():
             if isinstance(image, np.ndarray):
-                image = self.preprocess(image, return_tensors="pt", do_rescale=False).pixel_values
+                image = self.preprocess(
+                    image, return_tensors="pt", do_rescale=False
+                ).pixel_values
             else:
                 image = self.preprocess(image, return_tensors="pt").pixel_values
             embedding = self.model.get_image_features(image)
@@ -66,11 +70,11 @@ class BetaPriorPipeline:
         latent_end,
         num_inference_steps,
         uniform=False,
-        **kwargs
+        **kwargs,
     ):
         idx = np.argmax(ds)
         A = xs[idx]
-        B = xs[idx+1]
+        B = xs[idx + 1]
         F_A = beta_distribution.cdf(A, alpha, beta_param)
         F_B = beta_distribution.cdf(B, alpha, beta_param)
 
@@ -82,34 +86,34 @@ class BetaPriorPipeline:
 
         if uniform:
             idx = np.argmax(np.array(xs) - np.array([0] + xs[:-1])) - 1
-            t = (xs[idx] + xs[idx+1]) / 2
+            t = (xs[idx] + xs[idx + 1]) / 2
 
         if t < 0 or t > 1:
             return xs, False
 
         ims = self.pipe.interpolate_single(
-                t,
-                prompt_start=prompt_start,
-                prompt_end=prompt_end,
-                negative_prompt=negative_prompt,
-                latent_start=latent_start,
-                latent_end=latent_end,
-                early='fused_outer',
-                num_inference_steps=num_inference_steps,
-                **kwargs
-            )
+            t,
+            prompt_start=prompt_start,
+            prompt_end=prompt_end,
+            negative_prompt=negative_prompt,
+            latent_start=latent_start,
+            latent_end=latent_end,
+            early="fused_outer",
+            num_inference_steps=num_inference_steps,
+            **kwargs,
+        )
 
         added_image = ims.images[1]
         added_feature = self._get_feature(added_image)
         d1 = self._compute_clip(features[idx], added_feature)
-        d2 = self._compute_clip(features[idx+1], added_feature)
+        d2 = self._compute_clip(features[idx + 1], added_feature)
 
-        images.insert(idx+1, ims.images[1])
-        features.insert(idx+1, added_feature)
-        xs.insert(idx+1, t)
+        images.insert(idx + 1, ims.images[1])
+        features.insert(idx + 1, added_feature)
+        xs.insert(idx + 1, t)
         del ds[idx]
         ds.insert(idx, d1)
-        ds.insert(idx+1, d2)
+        ds.insert(idx + 1, d2)
         return xs, True
 
     def explore_with_beta(
@@ -124,7 +128,7 @@ class BetaPriorPipeline:
         init_alpha=3,
         init_beta=3,
         uniform=False,
-        **kwargs
+        **kwargs,
     ):
         xs = [0.0, 0.5, 1.0]
         images = self.pipe.interpolate_single(
@@ -134,17 +138,29 @@ class BetaPriorPipeline:
             negative_prompt=negative_prompt,
             latent_start=latent_start,
             latent_end=latent_end,
-            early='fused_outer',
+            early="fused_outer",
             num_inference_steps=num_inference_steps,
-            **kwargs
+            **kwargs,
         )
         images = images.images
         images = [images[0], images[1], images[2]]
         features = [self._get_feature(image) for image in images]
-        ds =[self._compute_clip(features[0], features[1]), self._compute_clip(features[1], features[2])]
+        ds = [
+            self._compute_clip(features[0], features[1]),
+            self._compute_clip(features[1], features[2]),
+        ]
         alpha = init_alpha
         beta_param = init_beta
-        print("Alpha:", alpha, "| Beta:", beta_param, "| Current Coefs:", xs, "| Current Distances:", ds)
+        print(
+            "Alpha:",
+            alpha,
+            "| Beta:",
+            beta_param,
+            "| Current Coefs:",
+            xs,
+            "| Current Distances:",
+            ds,
+        )
         while len(xs) < exploration_size:
             xs, flag = self._add_next_point(
                 ds,
@@ -160,7 +176,7 @@ class BetaPriorPipeline:
                 latent_end,
                 num_inference_steps,
                 uniform=uniform,
-                **kwargs
+                **kwargs,
             )
             if not flag:
                 break
@@ -169,7 +185,16 @@ class BetaPriorPipeline:
                 alpha = 1
                 beta_param = 1
             print(f"--------Exploration: {len(xs)} / {exploration_size}--------")
-            print("Alpha:", alpha, "| Beta:", beta_param, "| Current Coefs:", xs, "| Current Distances:", ds)
+            print(
+                "Alpha:",
+                alpha,
+                "| Beta:",
+                beta_param,
+                "| Current Coefs:",
+                xs,
+                "| Current Distances:",
+                ds,
+            )
 
         return images, features, ds, xs, alpha, beta_param
 
@@ -187,7 +212,7 @@ class BetaPriorPipeline:
     def extract_uniform_points_plus(self, features, interpolation_size):
         weights = -1 * np.ones((len(features), len(features)))
         for i in range(len(features)):
-            for j in range(i+1, len(features)):
+            for j in range(i + 1, len(features)):
                 weights[i][j] = self._compute_clip(features[i], features[j])
         m = len(features)
         n = interpolation_size
@@ -197,9 +222,14 @@ class BetaPriorPipeline:
 
     def find_minimal_spread_and_path(self, n, m, weights):
         # Collect all unique edge weights, excluding non-existent edges (-1)
-        W = sorted({
-            weights[i][j] for i in range(m - 1) for j in range(i + 1, m) if weights[i][j] != -1
-        })
+        W = sorted(
+            {
+                weights[i][j]
+                for i in range(m - 1)
+                for j in range(i + 1, m)
+                if weights[i][j] != -1
+            }
+        )
         min_weight = W[0]
         max_weight = W[-1]
 
@@ -231,7 +261,11 @@ class BetaPriorPipeline:
 
             # Dynamic Programming to check for a valid path
             dp = [[None] * (n + 1) for _ in range(m)]
-            dp[0][1] = (float('-inf'), float('inf'), [0])  # Start from x1 with path length 1
+            dp[0][1] = (
+                float("-inf"),
+                float("inf"),
+                [0],
+            )  # Start from x1 with path length 1
 
             for l in range(1, n):
                 for i in range(m):
@@ -246,8 +280,14 @@ class BetaPriorPipeline:
                                 new_diff = new_max_w - new_min_w
                                 if new_diff <= D:
                                     dp_j_l_plus_1 = dp[j][l + 1]
-                                    if dp_j_l_plus_1 is None or new_diff < (dp_j_l_plus_1[0] - dp_j_l_plus_1[1]):
-                                        dp[j][l + 1] = (new_max_w, new_min_w, path + [j])
+                                    if dp_j_l_plus_1 is None or new_diff < (
+                                        dp_j_l_plus_1[0] - dp_j_l_plus_1[1]
+                                    ):
+                                        dp[j][l + 1] = (
+                                            new_max_w,
+                                            new_min_w,
+                                            path + [j],
+                                        )
 
             if dp[m - 1][n] is not None:
                 # Reconstruct the path
@@ -269,7 +309,7 @@ class BetaPriorPipeline:
         init_beta=3,
         interpolation_size=7,
         uniform=False,
-        **kwargs
+        **kwargs,
     ):
         images, features, ds, xs, alpha, beta_param = self.explore_with_beta(
             prompt_start,
@@ -282,7 +322,7 @@ class BetaPriorPipeline:
             init_alpha,
             init_beta,
             uniform=uniform,
-            **kwargs
+            **kwargs,
         )
         # output_idx = self.extract_uniform_points(ds, interpolation_size)
         output_idx = self.extract_uniform_points_plus(features, interpolation_size)
@@ -370,7 +410,9 @@ def bayesian_prior_selection(
             alpha=alpha,
             beta=beta,
         )
-        smoothness, _, _ = compute_smoothness_and_consistency(interpolation_sequence, lpips_model)
+        smoothness, _, _ = compute_smoothness_and_consistency(
+            interpolation_sequence, lpips_model
+        )
         return smoothness
 
     # Add prior into selection of alpha and beta
@@ -435,7 +477,10 @@ def bayesian_prior_selection(
     beta = results["params"]["beta"]
     return alpha, beta
 
-def generate_beta_tensor(size: int, alpha: float = 3, beta: float = 3) -> torch.FloatTensor:
+
+def generate_beta_tensor(
+    size: int, alpha: float = 3, beta: float = 3
+) -> torch.FloatTensor:
     """
     Assume size as n
     Generates a PyTorch tensor of values [x0, x1, ..., xn-1] for the Beta distribution
