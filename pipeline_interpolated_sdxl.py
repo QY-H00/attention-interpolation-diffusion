@@ -51,7 +51,10 @@ from diffusers.utils.torch_utils import randn_tensor
 
 from interpolation import (
     InnerInterpolatedAttnProcessor,
+    InnerInterpolatedIPAttnProcessor,
     OuterInterpolatedAttnProcessor,
+    OuterInterpolatedIPAttnProcessor,
+    ScaleControlIPAttnProcessor,
     slerp,
 )
 from transformers import (
@@ -402,6 +405,8 @@ class InterpolationStableDiffusionXLPipeline(
             self.watermark = StableDiffusionXLWatermarker()
         else:
             self.watermark = None
+
+        self.load_aid()
 
     def generate_latent(
         self, generator: Optional[torch.Generator] = None, torch_device: str = "cpu"
@@ -1057,6 +1062,78 @@ class InterpolationStableDiffusionXLPipeline(
         assert emb.shape == (w.shape[0], embedding_dim)
         return emb
 
+    # load interpolated attention processor
+    def load_aid(
+        self,
+        t: Optional[float] = 0.5,
+        is_fused: bool = True,
+        atype="fused_outer"
+    ):
+        attn_procs = {}
+        for name in self.unet.attn_processors.keys():
+            if not name.startswith("encoder"):
+                if atype == "fused_outer":
+                    attn_procs[name] = OuterInterpolatedAttnProcessor(
+                        t=t, is_fused=is_fused, original_attn=self.unet.attn_processors[name]
+                    )
+                elif atype == "fused_inner":
+                    attn_procs[name] = InnerInterpolatedAttnProcessor(
+                        t=t, is_fused=is_fused, original_attn=self.unet.attn_processors[name]
+                    )
+            else:
+                attn_procs[name] = self.unet.attn_processors[name]
+        self.unet.set_attn_processor(attn_procs)
+
+    # load customized ip_adapter
+    def load_aid_ip_adapter(
+        self,
+        pretrained_model_name_or_path_or_dict: Union[
+            str, List[str], Dict[str, torch.Tensor]
+        ],
+        subfolder: Union[str, List[str]],
+        weight_name: Union[str, List[str]],
+        t: Optional[float] = 0.5,
+        is_fused: bool = True,
+        image_encoder_folder: Optional[str] = "image_encoder",
+        early="fused_outer",
+        **kwargs,
+    ):
+        self.load_ip_adapter(
+            pretrained_model_name_or_path_or_dict=pretrained_model_name_or_path_or_dict,
+            subfolder=subfolder,
+            weight_name=weight_name,
+            image_encoder_folder=image_encoder_folder,
+            **kwargs,
+        )
+        attn_procs = {}
+        for name in self.unet.attn_processors.keys():
+            if not name.startswith("encoder"):
+                if early == "fused_outer":
+                    attn_procs[name] = OuterInterpolatedIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
+                elif early == "fused_inner":
+                    attn_procs[name] = InnerInterpolatedIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
+                elif early == "scale_control":
+                    attn_procs[name] = ScaleControlIPAttnProcessor(
+                        t=t, is_fused=is_fused, ip_attn=self.unet.attn_processors[name]
+                    )
+            else:
+                attn_procs[name] = self.unet.attn_processors[name]
+        self.unet.set_attn_processor(attn_procs)
+
+    def activate_aid(self, it: float):
+        for name in self.unet.attn_processors.keys():
+            if not name.startswith("encoder"):
+                self.unet.attn_processors[name].activate(it)
+
+    def deactivate_aid(self):
+        for name in self.unet.attn_processors.keys():
+            if not name.startswith("encoder"):
+                self.unet.attn_processors[name].deactivate()
+
     @property
     def guidance_scale(self):
         return self._guidance_scale
@@ -1619,10 +1696,12 @@ class InterpolationStableDiffusionXLPipeline(
         prompt_end: Optional[str] = None,
         latent_start: Optional[torch.FloatTensor] = None,
         latent_end: Optional[torch.FloatTensor] = None,
+        image_start: Optional[PipelineImageInput] = None,
+        image_end: Optional[PipelineImageInput] = None,
         guide_prompt: Optional[str] = None,
         warmup_ratio: float = 0.5,
-        early: str = "fused_outer",
-        late: str = "self",
+        is_fused: bool = True,
+        atype: str = "outer",
         init: str = "linear",
         prompt_2: Optional[Union[str, List[str]]] = None,
         height: Optional[int] = None,
@@ -1814,6 +1893,12 @@ class InterpolationStableDiffusionXLPipeline(
                 "callback_steps",
                 "1.0.0",
                 "Passing `callback_steps` as an input argument to `__call__` is deprecated, consider use `callback_on_step_end`",
+            )
+
+        if image_start is not None and image_end is None:
+            # throw error
+            raise ValueError(
+                "Please provide both `image_start` and `image_end` to interpolate, or only `image_end` to control the scale."
             )
 
         # 0. Default height and width to unet
@@ -2055,6 +2140,59 @@ class InterpolationStableDiffusionXLPipeline(
                 self.do_classifier_free_guidance,
             )
 
+        # 7*. Prepare image embeddings for interpolation
+        if image_end is not None:
+            image_embeds_end = self.prepare_ip_adapter_image_embeds(
+                image_end,
+                None,
+                device,
+                3,
+                self.do_classifier_free_guidance,
+            )
+            negative_image_embeds_end, image_embeds_end = image_embeds_end[0].chunk(2)
+
+            if image_start is None:
+                image_embeds_start = negative_image_embeds_end
+                negative_image_embeds_start = negative_image_embeds_end
+            else:
+                image_embeds_start = self.prepare_ip_adapter_image_embeds(
+                    image_start,
+                    None,
+                    device,
+                    3,
+                    self.do_classifier_free_guidance,
+                )
+                negative_image_embeds_start, image_embeds_start = image_embeds_start[
+                    0
+                ].chunk(2)
+
+            if init == "linear":
+                image_embeds_target = torch.lerp(image_embeds_start, image_embeds_end, it)
+                negative_image_embeds_target = torch.lerp(
+                    negative_image_embeds_start, negative_image_embeds_end, it
+                )
+            else:
+                image_embeds_target = slerp(image_embeds_start, image_embeds_end, it)
+                negative_image_embeds_target = slerp(
+                    negative_image_embeds_start, negative_image_embeds_end, it
+                )
+
+            image_embeds = torch.cat(
+                [image_embeds_start, image_embeds_target, image_embeds_end], dim=0
+            ).to(device=device)
+
+            negative_image_embeds = torch.cat(
+                [
+                    negative_image_embeds_start,
+                    negative_image_embeds_target,
+                    negative_image_embeds_end,
+                ],
+                dim=0,
+            ).to(device=device)
+
+            image_embeds = [image_embeds]
+            negative_image_embeds = [negative_image_embeds]
+
         # 8. Denoising loop
         num_warmup_steps = max(
             len(timesteps) - num_inference_steps * self.scheduler.order, 0
@@ -2081,35 +2219,10 @@ class InterpolationStableDiffusionXLPipeline(
         # 9. Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
-            print("!!!!!!!!!!!!!!!!")
             guidance_scale_tensor = torch.tensor(self.guidance_scale - 1).repeat(3)
             timestep_cond = self.get_guidance_scale_embedding(
                 guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
             ).to(device=device, dtype=latents.dtype)
-
-        # 10. Prepare InterpolatedAttnProcessor
-        pure_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=False)
-        fused_inner_attn_proc = InnerInterpolatedAttnProcessor(t=it, is_fused=True)
-        pure_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=False)
-        fused_outer_attn_proc = OuterInterpolatedAttnProcessor(t=it, is_fused=True)
-        self_attn_proc = AttnProcessor2_0()
-        procs_dict = {
-            "pure_inner": pure_inner_attn_proc,
-            "fused_inner": fused_inner_attn_proc,
-            "pure_outer": pure_outer_attn_proc,
-            "fused_outer": fused_outer_attn_proc,
-            "self": self_attn_proc,
-        }
-
-        # print(
-        #     "Embeds Dimension:",
-        #     prompt_embeds.shape,
-        #     negative_prompt_embeds.shape,
-        #     pooled_prompt_embeds.shape,
-        #     negative_pooled_prompt_embeds.shape,
-        # )
-        # print("Latents Dimension:", latents.shape)
-        # print("Time IDs Dimension:", add_time_ids.shape, negative_add_time_ids.shape)
 
         warmup_steps = int(num_inference_steps * warmup_ratio)
         self._num_timesteps = len(timesteps)
@@ -2127,17 +2240,20 @@ class InterpolationStableDiffusionXLPipeline(
 
                 # Set the interpolated attention processor
                 if i < warmup_steps:
-                    interpolated_attn_proc = procs_dict[early]
+                    self.activate_aid(it)
                 else:
-                    interpolated_attn_proc = procs_dict[late]
+                    self.deactivate_aid()
 
-                self.unet.set_attn_processor(processor=interpolated_attn_proc)
                 # predict the noise residual for conditional noise
                 added_cond_kwargs = {
                     "text_embeds": pooled_prompt_embeds,
                     "time_ids": add_time_ids,
                 }
-                if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
+                if (
+                    (image_start is not None or image_end is not None)
+                    or ip_adapter_image is not None
+                    or ip_adapter_image_embeds is not None
+                ):
                     added_cond_kwargs["image_embeds"] = image_embeds
                 noise_pred_text = self.unet(
                     latent_model_input,
@@ -2149,16 +2265,20 @@ class InterpolationStableDiffusionXLPipeline(
                     return_dict=False,
                 )[0]
 
-                # Set back to usual attention processor
-                attn_proc = AttnProcessor2_0()
-                self.unet.set_attn_processor(processor=attn_proc)
+                # Set back to usual attention processor, if using image_embed, dont do this
+                self.deactivate_aid()
+
                 # predict the noise residual for negative noise
                 added_cond_kwargs = {
                     "text_embeds": negative_pooled_prompt_embeds,
                     "time_ids": negative_add_time_ids,
                 }
-                if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-                    added_cond_kwargs["image_embeds"] = image_embeds
+                if (
+                    (image_start is not None or image_end is not None)
+                    or ip_adapter_image is not None
+                    or ip_adapter_image_embeds is not None
+                ):
+                    added_cond_kwargs["image_embeds"] = negative_image_embeds
                 noise_pred_uncond = self.unet(
                     latent_model_input,
                     t,

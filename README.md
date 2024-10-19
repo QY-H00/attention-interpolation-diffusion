@@ -31,9 +31,11 @@ NeurIPS 2024 Paper
 </p>
 
 ## 📌 Release
-[10/2024] We add dynamic pipeline to further improve smoothness, try `play_sdxl_ebta.ipynb`!
+[10/2024] We are now supporting various application including compositional generation, image morphing, image editing and image-control generation (based on IP-Adapter), try `play_sdxl_application.ipynb` and `play_sd.ipynb` for fun!
 
-[10/2024] We are now supporting interpolating between images via [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter), try `play_ip.ipynb`!
+[10/2024] We are now supporting interpolating between images via [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter)!
+
+[10/2024] We add dynamic selection pipeline to further improve smoothness, try `play_sdxl_trial.ipynb`!
 
 [10/2024] PAID is accepted as a conference paper by NeurIPS 2024!
 
@@ -49,14 +51,24 @@ Conditional diffusion models can create unseen images in various settings, aidin
 
 ## ▶️ PAID Results
 
+<p align="center">
+<img src="sdxl_results/aesthetic/3.jpg">
+</p>
+
+<p align="center">
+<img src="sdxl_results/anime/3.jpg">
+</p>
+
+<p align="center">
+<img src="sdxl_results/photorealistic/1.jpg">
+</p>
+
+<details><summary>CLICK for more results </summary>
+
 #### Aesthetic
 
 <p align="center">
 <img src="sdxl_results/aesthetic/2.jpg">
-</p>
-
-<p align="center">
-<img src="sdxl_results/aesthetic/3.jpg">
 </p>
 
 <p align="center">
@@ -73,15 +85,7 @@ Conditional diffusion models can create unseen images in various settings, aidin
 <img src="sdxl_results/anime/2.jpg">
 </p>
 
-<p align="center">
-<img src="sdxl_results/anime/3.jpg">
-</p>
-
 #### Photorealistic
-
-<p align="center">
-<img src="sdxl_results/photorealistic/1.jpg">
-</p>
 
 <p align="center">
 <img src="sdxl_results/photorealistic/2.jpg">
@@ -91,9 +95,33 @@ Conditional diffusion models can create unseen images in various settings, aidin
 <img src="sdxl_results/photorealistic/3.jpg">
 </p>
 
-## 📷 PAID + IP-Adapter
+</details>
 
-#### Image Morphing
+## 📷 Application
+
+<p align="center">
+<img src="asset/applications.png">
+</p>
+
+### Compositional Generation
+
+Given a prompt that involves multiple components (e.g., "A dog driving a car"), we use the compositional description as a guidance prompt, with each related component (e.g., "A dog" and "A car") serving as the prompts at endpoints for interpolation. Under this setting, we apply PAID and then select the image from the interpolation sequence that achieves the highest CLIP score with respect to the compositional description.
+
+<p align="center">
+<img src="asset/composition.png">
+</p>
+
+### Image Editing
+
+We can use [P2P](https://github.com/google/prompt-to-prompt) or [EDICT](https://github.com/salesforce/EDICT) to firstly inverse the generation process of given image, and then set the endpoint condition as the original prompt and the edting prompt, respectively, to control the editing level of images.
+
+<p align="center">
+<img src="asset/editing.png">
+</p>
+
+### Image Morphing
+
+Using IP-Adapter, we set the two images as the condition at the endpoints of the interpolation sequence for image morphing. Notice that the text prompt can be further added to refine the generated images at the endpoints.
 
 <p align="center">
 <img src="sdxl_results/morph/1.jpg">
@@ -103,14 +131,12 @@ Conditional diffusion models can create unseen images in various settings, aidin
 <img src="sdxl_results/morph/2.jpg">
 </p>
 
-#### Scale Control of Image Prompt
+### Image-Control generation
+
+Given a text prompt and an image, we can better control the scale of IP-Adapter by AID. To achieve this, we set one endpoint as only using text prompt as condition while the other endpoint using both text and image condition. This provides smoother control over the scale of IP-Adapter.
 
 <p align="center">
 <img src="sdxl_results/scale_control/1.jpg">
-</p>
-
-<p align="center">
-<img src="sdxl_results/scale_control/2.jpg">
 </p>
 
 ## 🏍️ Google Colab
@@ -143,118 +169,34 @@ pip install gradio
 gradio gradio_src/app.py
 ```
 
-## 🎲 Customized Interpolation
-
-Our method offers users customized and diverse configurations to experiment with, allowing them to freely adjust settings and achieve a wide range of interesting interpolation results. Here are some examples:
-
-### Prompt guidance
-
-#### 1. "A dog driving car"
-
-<p align="center">
-<img src="example/dog_car_1.png">
-</p>
-
-#### 2. "A car with dog furry texture"
-
-<p align="center">
-<img src="example/dog_car_2.png">
-</p>
-
-#### 3. "A toy named dog-car"
-
-<p align="center">
-<img src="example/dog_car_3.png">
-</p>
-
-#### 4. "A painting of car and dog drawn by Vincent van Gogh"
-
-<p align="center">
-<img src="example/dog_car_4.png">
-</p>
-
-### $\alpha$ and $\beta$ of the Beta prior
-
-#### 1. $\alpha=1, \beta=1$
-
-<p align="center">
-<img src="example/shark_fox_1.png">
-</p>
-
-#### 2. $\alpha=1, \beta=8$
-
-<p align="center">
-<img src="example/shark_fox_2.png">
-</p>
-
-#### 3. $\alpha=8, \beta=1$
-
-<p align="center">
-<img src="example/shark_fox_3.png">
-</p>
 
 ## 📝 Supporting Models
 
 | Model Name            |  Link                                             |
 |-----------------------|-------------------------------------------------------------|
-| Stable Diffusion 1.4-512  | [CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)   |
+| Stable Diffusion 1.5-512  | [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)   |
+| Realistic Vision V4.0 | [SG161222/Realistic_Vision_V4.0_noVAE](https://huggingface.co/SG161222/Realistic_Vision_V4.0_noVAE) |
 | Stable Diffusion 2.1-768  | [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1) |
 | Stable Diffusion XL-1024   | [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) |
-|Animagine XL 3.1 |   [cagliostrolab/animagine-xl-3.1](https://huggingface.co/cagliostrolab/animagine-xl-3.1)|
+| Animagine XL 3.1 |   [cagliostrolab/animagine-xl-3.1](https://huggingface.co/cagliostrolab/animagine-xl-3.1)|
+| Realistic Vision XL V4.0 | [SG161222/RealVisXL_V5.0](https://huggingface.co/SG161222/RealVisXL_V5.0) |
+| Playground v2.5 – 1024 | [playgroundai/playground-v2.5-1024px-aesthetic](https://huggingface.co/playgroundai/playground-v2.5-1024px-aesthetic) |
+| Juggernaut XL v9 | [RunDiffusion/Juggernaut-XL-v9](https://huggingface.co/RunDiffusion/Juggernaut-XL-v9) |
+
 
 ## ✒️Citation
 
 If you found this repository/our paper useful, please consider citing:
 
 ``` bibtex
-@misc{he2024aid,
-      title={AID: Attention Interpolation of Text-to-Image Diffusion}, 
-      author={Qiyuan He and Jinghao Wang and Ziwei Liu and Angela Yao},
-      year={2024},
-      eprint={2403.17924},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+@article{he2024aid,
+  title={AID: Attention Interpolation of Text-to-Image Diffusion},
+  author={He, Qiyuan and Wang, Jinghao and Liu, Ziwei and Yao, Angela},
+  journal={arXiv preprint arXiv:2403.17924},
+  year={2024}
 }
 ```
 
 ## ❤️ Acknowledgement
 
-We thank the following repositories for their great work: [diffusers](https://github.com/huggingface/diffusers), [transformers](https://github.com/huggingface/transformers).
-
-## ➕️ More Results with SD1.5
-
-### Realist Style
-
-<p align="center">
-Pikachu -> Gundam
-<img src="example/pikachu_gundam.png">
-</p>
-
-<p align="center">
-Computer -> Phone
-<img src="example/computer_phone.png">
-</p>
-
-### Anime Style
-
-<p align="center">
-Ninja -> Cat
-<img src="example/ninja_cat.png">
-</p>
-
-<p align="center">
-Ninja -> Dog
-<img src="example/ninja_dog.png">
-</p>
-
-### Oil-Painting Style
-
-<p align="center">
-Starry night -> Mona Lisas
-<img src="example/starry_mona.png">
-</p>
-
-<p align="center">
-SkyCraper -> Town
-<img src="example/skycraper_town.png">
-</p>
+We thank the following repositories for their great work: [diffusers](https://github.com/huggingface/diffusers), [transformers](https://github.com/huggingface/transformers), [IP-Adapter](https://github.com/tencent-ailab/IP-Adapter), [P2P](https://github.com/google/prompt-to-prompt) and [EDICT](https://github.com/salesforce/EDICT).

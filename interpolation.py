@@ -7,14 +7,50 @@ from torch import nn as nn
 from prior import generate_beta_tensor
 
 
-class ScaleControlIPAttnProcessor(nn.Module):
-    r"""
-    Personalized processor for performing outer attention interpolation.
+class InterpolatedAttnProcessor(nn.Module):
+    def __init__(
+        self,
+        t: Optional[float] = None,
+        size: int = 7,
+        is_fused: bool = False,
+        alpha: float = 1,
+        beta: float = 1,
+    ):
+        super().__init__()
+        if t is None:
+            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
+            ts[0], ts[-1] = 0, 1
+        else:
+            assert t > 0 and t < 1, "t must be between 0 and 1"
+            ts = [0, t, 1]
+            ts = torch.tensor(ts)
+            size = 3
 
-    The attention output of interpolated image is obtained by:
-    (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
-    If fused with self-attention:
-    (1 - t) * Q_t * [K_1, K_t] * [V_1, V_t] + t * Q_t * [K_m, K_t] * [V_m, V_t];
+        self.size = size
+        self.coef = ts
+        self.is_fused = is_fused
+        self.activated = True
+
+    def deactivate(self):
+        self.activated = False
+
+    def activate(self, t):
+        self.activated = True
+        assert t > 0 and t < 1, "t must be between 0 and 1"
+        ts = [0, t, 1]
+        ts = torch.tensor(ts)
+        self.coef = ts
+
+    def load_end_point(self, key_begin, value_begin, key_end, value_end):
+        self.key_begin = key_begin
+        self.value_begin = value_begin
+        self.key_end = key_end
+        self.value_end = value_end
+
+
+class ScaleControlIPAttnProcessor(InterpolatedAttnProcessor):
+    r"""
+    Personalized processor for control the impact of image prompt via attention interpolation.
     """
 
     def __init__(
@@ -29,38 +65,13 @@ class ScaleControlIPAttnProcessor(nn.Module):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
-        super().__init__()
-        if t is None:
-            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
-            ts[0], ts[-1] = 0, 1
-        else:
-            assert t > 0 and t < 1, "t must be between 0 and 1"
-            ts = [0, t, 1]
-            ts = torch.tensor(ts)
-            size = 3
-
-        self.size = size
-        self.coef = ts
-        self.is_fused = is_fused
+        super().__init__(t=t, size=size, is_fused=is_fused, alpha=alpha, beta=beta)
 
         self.num_tokens = (
             ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
         )
         self.scale = ip_attn.scale if hasattr(ip_attn, "scale") else None
         self.ip_attn = ip_attn
-        self.use_origin = False
-
-    def set_origin(self):
-        self.use_origin = True
-
-    def set_interpolation(self):
-        self.use_origin = False
-
-    def set_t(self, t):
-        assert t > 0 and t < 1, "t must be between 0 and 1"
-        ts = [0, t, 1]
-        ts = torch.tensor(ts)
-        self.coef = ts
 
     def __call__(
         self,
@@ -70,9 +81,6 @@ class ScaleControlIPAttnProcessor(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        # if self.use_origin:
-        #     return self.ip_attn(attn, hidden_states, encoder_hidden_states, attention_mask, temb)
-
         residual = hidden_states
 
         if encoder_hidden_states is None:
@@ -119,7 +127,7 @@ class ScaleControlIPAttnProcessor(nn.Module):
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
 
-        if self.use_origin:
+        if not self.activated:
             key = attn.head_to_batch_dim(key)
             value = attn.head_to_batch_dim(value)
             attention_probs = attn.get_attention_scores(query, key, attention_mask)
@@ -141,15 +149,10 @@ class ScaleControlIPAttnProcessor(nn.Module):
                     * ip_hidden_states
                 )
         else:
-            # Specify the first and last key and value
-            key_begin = key[0:1]
-            key_end = key[-1:]
-            value_begin = value[0:1]
-            value_end = value[-1:]
-            key_begin = torch.cat([key_begin] * (self.size))
-            key_end = torch.cat([key_end] * (self.size))
-            value_begin = torch.cat([value_begin] * (self.size))
-            value_end = torch.cat([value_end] * (self.size))
+            key_begin = key[0:1].expand(3, *key.shape[1:])
+            key_end = key[-1:].expand(3, *key.shape[1:])
+            value_begin = value[0:1].expand(3, *value.shape[1:])
+            value_end = value[-1:].expand(3, *value.shape[1:])
             key_begin = attn.head_to_batch_dim(key_begin)
             value_begin = attn.head_to_batch_dim(value_begin)
             key_end = attn.head_to_batch_dim(key_end)
@@ -208,14 +211,10 @@ class ScaleControlIPAttnProcessor(nn.Module):
         return hidden_states
 
 
-class OuterInterpolatedIPAttnProcessor(nn.Module):
+class OuterInterpolatedIPAttnProcessor(InterpolatedAttnProcessor):
     r"""
     Personalized processor for performing outer attention interpolation.
-
-    The attention output of interpolated image is obtained by:
-    (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
-    If fused with self-attention:
-    (1 - t) * Q_t * [K_1, K_t] * [V_1, V_t] + t * Q_t * [K_m, K_t] * [V_m, V_t];
+    Combined with IP-Adapter attention processor.
     """
 
     def __init__(
@@ -230,38 +229,13 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
-        super().__init__()
-        if t is None:
-            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
-            ts[0], ts[-1] = 0, 1
-        else:
-            assert t > 0 and t < 1, "t must be between 0 and 1"
-            ts = [0, t, 1]
-            ts = torch.tensor(ts)
-            size = 3
-
-        self.size = size
-        self.coef = ts
-        self.is_fused = is_fused
+        super().__init__(t=t, size=size, is_fused=is_fused, alpha=alpha, beta=beta)
 
         self.num_tokens = (
             ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
         )
         self.scale = ip_attn.scale if hasattr(ip_attn, "scale") else None
         self.ip_attn = ip_attn
-        self.use_origin = False
-
-    def set_origin(self):
-        self.use_origin = True
-
-    def set_interpolation(self):
-        self.use_origin = False
-
-    def set_t(self, t):
-        assert t > 0 and t < 1, "t must be between 0 and 1"
-        ts = [0, t, 1]
-        ts = torch.tensor(ts)
-        self.coef = ts
 
     def __call__(
         self,
@@ -271,7 +245,7 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        if self.use_origin:
+        if not self.activated:
             return self.ip_attn(
                 attn, hidden_states, encoder_hidden_states, attention_mask, temb
             )
@@ -323,16 +297,10 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         value = attn.to_v(encoder_hidden_states)
 
         # Specify the first and last key and value
-        key_begin = key[0:1]
-        key_end = key[-1:]
-        value_begin = value[0:1]
-        value_end = value[-1:]
-
-        key_begin = torch.cat([key_begin] * (self.size))
-        key_end = torch.cat([key_end] * (self.size))
-        value_begin = torch.cat([value_begin] * (self.size))
-        value_end = torch.cat([value_end] * (self.size))
-
+        key_begin = key[0:1].expand(3, *key.shape[1:])
+        key_end = key[-1:].expand(3, *key.shape[1:])
+        value_begin = value[0:1].expand(3, *value.shape[1:])
+        value_end = value[-1:].expand(3, *value.shape[1:])
         key_begin = attn.head_to_batch_dim(key_begin)
         value_begin = attn.head_to_batch_dim(value_begin)
         key_end = attn.head_to_batch_dim(key_end)
@@ -363,16 +331,10 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
             value = self.ip_attn.to_v_ip[0](ip_hidden_states[0][::3])
 
             # Specify the first and last key and value
-            key_begin = key[0:1]
-            key_end = key[-1:]
-            value_begin = value[0:1]
-            value_end = value[-1:]
-
-            key_begin = torch.cat([key_begin] * (self.size))
-            key_end = torch.cat([key_end] * (self.size))
-            value_begin = torch.cat([value_begin] * (self.size))
-            value_end = torch.cat([value_end] * (self.size))
-
+            key_begin = key[0:1].expand(3, *key.shape[1:])
+            key_end = key[-1:].expand(3, *key.shape[1:])
+            value_begin = value[0:1].expand(3, *value.shape[1:])
+            value_end = value[-1:].expand(3, *value.shape[1:])
             key_begin = attn.head_to_batch_dim(key_begin)
             value_begin = attn.head_to_batch_dim(value_begin)
             key_end = attn.head_to_batch_dim(key_end)
@@ -425,14 +387,11 @@ class OuterInterpolatedIPAttnProcessor(nn.Module):
         return hidden_states
 
 
-class InnerInterpolatedIPAttnProcessor(nn.Module):
+class InnerInterpolatedIPAttnProcessor(InterpolatedAttnProcessor):
     r"""
-    Personalized processor for performing outer attention interpolation.
+    Personalized processor for performing inner attention interpolation.
 
-    The attention output of interpolated image is obtained by:
-    (1 - t) * Q_t * K_1 * V_1 + t * Q_t * K_m * V_m;
-    If fused with self-attention:
-    (1 - t) * Q_t * [K_1, K_t] * [V_1, V_t] + t * Q_t * [K_m, K_t] * [V_m, V_t];
+    With IP-Adapter.
     """
 
     def __init__(
@@ -447,38 +406,13 @@ class InnerInterpolatedIPAttnProcessor(nn.Module):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
-        super().__init__()
-        if t is None:
-            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
-            ts[0], ts[-1] = 0, 1
-        else:
-            assert t > 0 and t < 1, "t must be between 0 and 1"
-            ts = [0, t, 1]
-            ts = torch.tensor(ts)
-            size = 3
-
-        self.size = size
-        self.coef = ts
-        self.is_fused = is_fused
+        super().__init__(t=t, size=size, is_fused=is_fused, alpha=alpha, beta=beta)
 
         self.num_tokens = (
             ip_attn.num_tokens if hasattr(ip_attn, "num_tokens") else (16,)
         )
         self.scale = ip_attn.scale if hasattr(ip_attn, "scale") else None
         self.ip_attn = ip_attn
-        self.use_origin = False
-
-    def set_origin(self):
-        self.use_origin = True
-
-    def set_interpolation(self):
-        self.use_origin = False
-
-    def set_t(self, t):
-        assert t > 0 and t < 1, "t must be between 0 and 1"
-        ts = [0, t, 1]
-        ts = torch.tensor(ts)
-        self.coef = ts
 
     def __call__(
         self,
@@ -488,7 +422,7 @@ class InnerInterpolatedIPAttnProcessor(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        if self.use_origin:
+        if not self.activated:
             return self.ip_attn(
                 attn, hidden_states, encoder_hidden_states, attention_mask, temb
             )
@@ -540,21 +474,15 @@ class InnerInterpolatedIPAttnProcessor(nn.Module):
         value = attn.to_v(encoder_hidden_states)
 
         # Specify the first and last key and value
-        key_begin = key[0:1]
-        key_end = key[-1:]
-        value_begin = value[0:1]
-        value_end = value[-1:]
-
-        key_begin = torch.cat([key_begin] * (self.size))
-        key_end = torch.cat([key_end] * (self.size))
-        value_begin = torch.cat([value_begin] * (self.size))
-        value_end = torch.cat([value_end] * (self.size))
+        key_begin = key[0:1].expand(3, *key.shape[1:])
+        key_end = key[-1:].expand(3, *key.shape[1:])
+        value_begin = value[0:1].expand(3, *value.shape[1:])
+        value_end = value[-1:].expand(3, *value.shape[1:])
 
         coef = self.coef.reshape(-1, 1, 1)
         coef = coef.to(key.device, key.dtype)
         key_cross = (1 - coef) * key_begin + coef * key_end
         value_cross = (1 - coef) * value_begin + coef * value_end
-
         key_cross = attn.head_to_batch_dim(key_cross)
         value_cross = attn.head_to_batch_dim(value_cross)
 
@@ -575,24 +503,17 @@ class InnerInterpolatedIPAttnProcessor(nn.Module):
             value = self.ip_attn.to_v_ip[0](ip_hidden_states[0][::3])
             key = key.squeeze()
             value = value.squeeze()
-            # Specify the first and last key and value
-            key_begin = key[0:1]
-            key_end = key[-1:]
-            value_begin = value[0:1]
-            value_end = value[-1:]
 
-            key_begin = torch.cat([key_begin] * (self.size))
-            key_end = torch.cat([key_end] * (self.size))
-            value_begin = torch.cat([value_begin] * (self.size))
-            value_end = torch.cat([value_end] * (self.size))
+            # Specify the first and last key and value
+            key_begin = key[0:1].expand(3, *key.shape[1:])
+            key_end = key[-1:].expand(3, *key.shape[1:])
+            value_begin = value[0:1].expand(3, *value.shape[1:])
+            value_end = value[-1:].expand(3, *value.shape[1:])
             key_cross = (1 - coef) * key_begin + coef * key_end
             value_cross = (1 - coef) * value_begin + coef * value_end
 
             key_cross = attn.head_to_batch_dim(key_cross)
             value_cross = attn.head_to_batch_dim(value_cross)
-
-            key = attn.head_to_batch_dim(key)
-            value = attn.head_to_batch_dim(value)
 
             # Fused with self-attention
             if self.is_fused:
@@ -624,7 +545,7 @@ class InnerInterpolatedIPAttnProcessor(nn.Module):
         return hidden_states
 
 
-class OuterInterpolatedAttnProcessor:
+class OuterInterpolatedAttnProcessor(InterpolatedAttnProcessor):
     r"""
     Personalized processor for performing outer attention interpolation.
 
@@ -641,22 +562,13 @@ class OuterInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
+        original_attn: Optional[nn.Module] = None,
     ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
-        if t is None:
-            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
-            ts[0], ts[-1] = 0, 1
-        else:
-            assert t > 0 and t < 1, "t must be between 0 and 1"
-            ts = [0, t, 1]
-            ts = torch.tensor(ts)
-            size = 3
-
-        self.size = size
-        self.coef = ts
-        self.is_fused = is_fused
+        super().__init__(t=t, size=size, is_fused=is_fused, alpha=alpha, beta=beta)
+        self.original_attn = original_attn
 
     def __call__(
         self,
@@ -666,6 +578,11 @@ class OuterInterpolatedAttnProcessor:
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
+        if not self.activated:
+            return self.original_attn(
+                attn, hidden_states, encoder_hidden_states, attention_mask, temb
+            )
+
         residual = hidden_states
 
         if attn.spatial_norm is not None:
@@ -762,7 +679,7 @@ class OuterInterpolatedAttnProcessor:
         return hidden_states
 
 
-class InnerInterpolatedAttnProcessor:
+class InnerInterpolatedAttnProcessor(InterpolatedAttnProcessor):
     r"""
     Personalized processor for performing inner attention interpolation.
 
@@ -779,22 +696,13 @@ class InnerInterpolatedAttnProcessor:
         is_fused: bool = False,
         alpha: float = 1,
         beta: float = 1,
+        original_attn: Optional[nn.Module] = None,
     ):
         """
         t: float, interpolation point between 0 and 1, if specified, size is set to 3
         """
-        if t is None:
-            ts = generate_beta_tensor(size, alpha=alpha, beta=beta)
-            ts[0], ts[-1] = 0, 1
-        else:
-            assert t > 0 and t < 1, "t must be between 0 and 1"
-            ts = [0, t, 1]
-            ts = torch.tensor(ts)
-            size = 3
-
-        self.size = size
-        self.coef = ts
-        self.is_fused = is_fused
+        super().__init__(t=t, size=size, is_fused=is_fused, alpha=alpha, beta=beta)
+        self.original_attn = original_attn
 
     def __call__(
         self,
@@ -804,6 +712,11 @@ class InnerInterpolatedAttnProcessor:
         attention_mask: Optional[torch.FloatTensor] = None,
         temb: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
+        if not self.activated:
+            return self.original_attn(
+                attn, hidden_states, encoder_hidden_states, attention_mask, temb
+            )
+
         residual = hidden_states
 
         if attn.spatial_norm is not None:
