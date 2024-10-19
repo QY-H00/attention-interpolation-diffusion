@@ -3,3 +3,7 @@ deprecated/*
 shiyishi.*
 __pycache__/*
 .vscode/*
+exp/
+references/
+sdxl_example/
+results/
