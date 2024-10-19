@@ -1,0 +1,16 @@
+{
+    "start": [
+        "1girl, Emilia, from Re:Zero − Starting Life in Another World, solo",
+        "1boy, Kirito, from Sword Art Online, face portrait",
+        "1girl, Saber, from Fate/stay night, face portrait",
+        "1boy, Monkey D. Luffy, from One Piece, solo"
+    ],
+    "end": [
+        "1girl, Rem, from Re:Zero − Starting Life in Another World, solo",
+        "1girl, Asuna, from Sword Art Online, face portrait",
+        "1boy, Shirou Emiya, from Fate/stay night, face portrait",
+        "1boy, Son Goku, from Dragon Ball, solo"
+    ],
+    "negative": "nsfw, lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]",
+    "prefix": "masterpiece, best quality, very aesthetic, absurdres, "
+}

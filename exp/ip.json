@@ -1,0 +1,22 @@
+{
+    "start": [
+        "references/starry.jpg",
+        "references/man.jpg",
+        "references/girl.jpg",
+        "references/monalisa.jpg"
+    ],
+    "end": [
+        "references/sunflowers.jpg",
+        "references/mountain.jpg",
+        "references/vermeer.jpg",
+        "references/taylor.jpg"
+    ],
+    "text_start": [
+        "", "", "", ""
+    ],
+    "text_end": [
+        "", "", "", ""
+    ],
+    "prefix": "",
+    "negative": ""
+}

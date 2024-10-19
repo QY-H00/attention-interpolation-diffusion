@@ -1,0 +1,12 @@
+{
+    "start": [
+        "1man, Kirito, from Sword Art Online, solo",
+        "1boy, Monkey D. Luffy, from One Piece, solo"
+    ],
+    "end": [
+        "1girl, Asuna, from Sword Art Online, solo",
+        "1boy, Son Goku, from Dragon Ball, solo"
+    ],
+    "negative": "nsfw, lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]",
+    "prefix": "masterpiece, best quality, very aesthetic, absurdres, "
+}
