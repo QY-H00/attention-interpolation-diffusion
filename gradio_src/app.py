@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
+from pipeline_interpolated_stable_diffusion import InterpolationStableDiffusionPipeline
 from scipy.stats import beta as beta_distribution
 
 from pipeline_interpolated_sdxl import InterpolationStableDiffusionXLPipeline
-from pipeline_interpolated_stable_diffusion import InterpolationStableDiffusionPipeline
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

@@ -67,10 +67,10 @@ from transformers import (
 
 
 if is_invisible_watermark_available():
-    from .watermark import StableDiffusionXLWatermarker
+    from .watermark import StableDiffusionXLWatermarker  # type: ignore # noqa: I001
 
 if is_torch_xla_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.core.xla_model as xm  # type: ignore # noqa: I001
 
     XLA_AVAILABLE = True
 else:
@@ -1064,21 +1064,22 @@ class InterpolationStableDiffusionXLPipeline(
 
     # load interpolated attention processor
     def load_aid(
-        self,
-        t: Optional[float] = 0.5,
-        is_fused: bool = True,
-        atype="fused_outer"
+        self, t: Optional[float] = 0.5, is_fused: bool = True, atype="fused_outer"
     ):
         attn_procs = {}
         for name in self.unet.attn_processors.keys():
             if not name.startswith("encoder"):
                 if atype == "fused_outer":
                     attn_procs[name] = OuterInterpolatedAttnProcessor(
-                        t=t, is_fused=is_fused, original_attn=self.unet.attn_processors[name]
+                        t=t,
+                        is_fused=is_fused,
+                        original_attn=self.unet.attn_processors[name],
                     )
                 elif atype == "fused_inner":
                     attn_procs[name] = InnerInterpolatedAttnProcessor(
-                        t=t, is_fused=is_fused, original_attn=self.unet.attn_processors[name]
+                        t=t,
+                        is_fused=is_fused,
+                        original_attn=self.unet.attn_processors[name],
                     )
             else:
                 attn_procs[name] = self.unet.attn_processors[name]
@@ -2167,7 +2168,9 @@ class InterpolationStableDiffusionXLPipeline(
                 ].chunk(2)
 
             if init == "linear":
-                image_embeds_target = torch.lerp(image_embeds_start, image_embeds_end, it)
+                image_embeds_target = torch.lerp(
+                    image_embeds_start, image_embeds_end, it
+                )
                 negative_image_embeds_target = torch.lerp(
                     negative_image_embeds_start, negative_image_embeds_end, it
                 )
