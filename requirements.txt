@@ -55,6 +55,7 @@ timm==0.9.16
 tokenizers==0.15.2
 tomli==2.0.1
 torch==2.1.0
+torchmetrics
 torchaudio==2.1.0
 torchvision==0.16.0
 tqdm==4.66.2
